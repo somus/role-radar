@@ -1,26 +1,47 @@
 import { useEffect, useState } from "react";
 import { electrobun } from "./electrobun";
+import { SetupWizard } from "./SetupWizard";
 
-type HealthStatus = {
-  ollama: boolean;
-  db: boolean;
-};
+type AppState = "loading" | "setup" | "main";
 
 export function App() {
-  const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<AppState>("loading");
+  const [modelName, setModelName] = useState("");
 
   useEffect(() => {
-    async function checkHealth() {
-      try {
-        const result = await electrobun.rpc.request.getHealth();
-        setHealth(result);
-      } catch (err: any) {
-        setError(err.message ?? "Failed to connect to main process");
+    async function init() {
+      const health = await electrobun.rpc.request.getHealth();
+      const savedModel = await electrobun.rpc.request.getSelectedModel();
+
+      if (health.ollama && savedModel) {
+        setModelName(savedModel);
+        setState("main");
+      } else {
+        setState("setup");
       }
     }
-    checkHealth();
+    init();
   }, []);
+
+  if (state === "loading") {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
+        <p className="text-zinc-500 animate-pulse">Loading...</p>
+      </div>
+    );
+  }
+
+  if (state === "setup") {
+    return (
+      <SetupWizard
+        onComplete={async () => {
+          const model = await electrobun.rpc.request.getSelectedModel();
+          setModelName(model);
+          setState("main");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
@@ -29,33 +50,10 @@ export function App() {
         <p className="text-zinc-400 text-lg">
           Job Discovery + Fit Scoring + Resume Generator
         </p>
-
-        {error && (
-          <div className="bg-red-950 border border-red-800 rounded-lg p-4 text-red-200">
-            {error}
-          </div>
-        )}
-
-        {health && (
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-center gap-2">
-              <span className={health.db ? "text-green-400" : "text-red-400"}>
-                {health.db ? "✓" : "✗"}
-              </span>
-              <span>Database</span>
-            </div>
-            <div className="flex items-center justify-center gap-2">
-              <span className={health.ollama ? "text-green-400" : "text-yellow-400"}>
-                {health.ollama ? "✓" : "○"}
-              </span>
-              <span>Ollama {health.ollama ? "connected" : "not configured"}</span>
-            </div>
-          </div>
-        )}
-
-        {!health && !error && (
-          <p className="text-zinc-500 animate-pulse">Connecting...</p>
-        )}
+        <div className="space-y-2 text-sm text-zinc-400">
+          <p>Model: <span className="text-zinc-200 font-medium">{modelName}</span></p>
+          <p className="text-green-400">Ready — upload your resume to begin</p>
+        </div>
       </div>
     </div>
   );

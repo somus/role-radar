@@ -8,6 +8,12 @@ export type OllamaModel = {
   parameterSize: string;
 };
 
+export type PullProgress = {
+  status: string;
+  completed?: number;
+  total?: number;
+};
+
 const MAX_RETRIES = 3;
 
 export class OllamaClient {
@@ -73,5 +79,35 @@ export class OllamaClient {
     }
 
     throw lastError ?? new Error("Inference failed after retries");
+  }
+
+  async *pullModel(name: string): AsyncGenerator<PullProgress> {
+    const res = await this.fetchFn(`${this.baseUrl}/api/pull`, {
+      method: "POST",
+      body: JSON.stringify({ name, stream: true }),
+    });
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (line.trim()) {
+          yield JSON.parse(line) as PullProgress;
+        }
+      }
+    }
+
+    if (buffer.trim()) {
+      yield JSON.parse(buffer) as PullProgress;
+    }
   }
 }

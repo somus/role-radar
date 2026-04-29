@@ -1,8 +1,19 @@
+export type OllamaModelInfo = {
+  name: string;
+  size: number;
+  parameterSize: string;
+};
+
 export type MainRPCSchema = {
   requests: {
     getHealth: () => { ollama: boolean; db: boolean };
     getProfile: () => Profile | null;
     runMigrations: () => { applied: number };
+    listOllamaModels: () => OllamaModelInfo[];
+    checkOllama: () => boolean;
+    pullOllamaModel: (args: { name: string }) => { success: boolean; error?: string };
+    setSelectedModel: (args: { model: string }) => void;
+    getSelectedModel: () => string;
   };
   messages: {
     log: { level: string; msg: string };

@@ -1,20 +1,24 @@
 import { BrowserWindow, BrowserView } from "electrobun/bun";
 import type { MainRPCSchema, WebviewRPCSchema } from "../shared/types";
 import { getDb, runMigrations, closeDb } from "./db";
+import { OllamaClient } from "./ollama-client";
 
 const migrationResult = runMigrations();
 console.log(`Migrations applied: ${migrationResult.applied}`);
 
+const ollama = new OllamaClient();
+
 const rpc = BrowserView.defineRPC<MainRPCSchema, WebviewRPCSchema>({
-  maxRequestTime: 30000,
+  maxRequestTime: 120000,
   handlers: {
     requests: {
-      getHealth: () => {
+      getHealth: async () => {
+        const ollamaOk = await ollama.checkHealth();
         try {
           getDb().query("SELECT 1").get();
-          return { ollama: false, db: true };
+          return { ollama: ollamaOk, db: true };
         } catch {
-          return { ollama: false, db: false };
+          return { ollama: ollamaOk, db: false };
         }
       },
       getProfile: () => {
@@ -22,6 +26,33 @@ const rpc = BrowserView.defineRPC<MainRPCSchema, WebviewRPCSchema>({
       },
       runMigrations: () => {
         return runMigrations();
+      },
+      checkOllama: async () => {
+        return await ollama.checkHealth();
+      },
+      listOllamaModels: async () => {
+        try {
+          return await ollama.listModels();
+        } catch {
+          return [];
+        }
+      },
+      pullOllamaModel: async ({ name }) => {
+        try {
+          for await (const event of ollama.pullModel(name)) {
+            console.log(`[pull] ${event.status} ${event.completed ?? ""}/${event.total ?? ""}`);
+          }
+          return { success: true };
+        } catch (err: any) {
+          return { success: false, error: err.message };
+        }
+      },
+      setSelectedModel: ({ model }) => {
+        getDb().query("UPDATE settings SET value = ? WHERE key = 'selected_model'").run(model);
+      },
+      getSelectedModel: () => {
+        const row = getDb().query("SELECT value FROM settings WHERE key = 'selected_model'").get() as { value: string } | null;
+        return row?.value ?? "";
       },
     },
     messages: {

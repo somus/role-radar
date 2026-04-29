@@ -138,6 +138,32 @@ describe("OllamaClient", () => {
       ).rejects.toThrow("JSON parse failed");
     });
 
+    it("throws after 3 failed retries with Zod validation errors", async () => {
+      mockFetch
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ response: JSON.stringify({ wrong: "a" }) }),
+            { status: 200 }
+          )
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ response: JSON.stringify({ also: "wrong" }) }),
+            { status: 200 }
+          )
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ response: JSON.stringify({ still: "wrong" }) }),
+            { status: 200 }
+          )
+        );
+
+      await expect(
+        client.infer("test prompt", testSchema, "qwen2.5:7b")
+      ).rejects.toThrow("validation");
+    });
+
     it("retries when Zod validation fails with valid JSON but wrong shape", async () => {
       mockFetch
         .mockResolvedValueOnce(
@@ -160,6 +186,39 @@ describe("OllamaClient", () => {
 
       const secondBody = JSON.parse((mockFetch.mock.calls[1] as any[])[1].body);
       expect(secondBody.prompt).toContain("validation errors");
+    });
+  });
+
+  describe("pullModel", () => {
+    it("calls /api/pull and collects progress events", async () => {
+      const lines = [
+        JSON.stringify({ status: "pulling manifest" }),
+        JSON.stringify({ status: "downloading", completed: 50, total: 100 }),
+        JSON.stringify({ status: "success" }),
+      ];
+      const body = new ReadableStream({
+        start(controller) {
+          for (const line of lines) {
+            controller.enqueue(new TextEncoder().encode(line + "\n"));
+          }
+          controller.close();
+        },
+      });
+
+      mockFetch.mockResolvedValueOnce(new Response(body, { status: 200 }));
+
+      const events: any[] = [];
+      for await (const event of client.pullModel("qwen2.5:7b")) {
+        events.push(event);
+      }
+
+      expect(events).toHaveLength(3);
+      expect(events[0]!.status).toBe("pulling manifest");
+      expect(events[1]!.completed).toBe(50);
+      expect(events[2]!.status).toBe("success");
+
+      const body2 = JSON.parse((mockFetch.mock.calls[0] as any[])[1].body);
+      expect(body2.name).toBe("qwen2.5:7b");
     });
   });
 });
