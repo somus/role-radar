@@ -5,7 +5,7 @@ import { getAppDataDir } from "../paths";
 import { storeProfile, getProfile, updateProfile } from "../profile-store";
 import { ResumeParseResultSchema } from "../../shared/types";
 import type { ResumeParseResult } from "../../shared/types";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
 const fixturePath = join(import.meta.dir, "fixtures/sample-resume.pdf");
@@ -101,10 +101,9 @@ describe("getAppDataDir", () => {
 
 describe("profile store", () => {
   let db: Database;
-  const migrationSql = readFileSync(
-    join(import.meta.dir, "../../../migrations/001_init.sql"),
-    "utf-8"
-  );
+  const migrationsDir = join(import.meta.dir, "../../../migrations");
+  const migrationSql = readdirSync(migrationsDir).filter(f => f.endsWith(".sql")).sort()
+    .map(f => readFileSync(join(migrationsDir, f), "utf-8")).join("\n");
 
   const parseResult: ResumeParseResult = {
     roles: ["Backend Engineer"],

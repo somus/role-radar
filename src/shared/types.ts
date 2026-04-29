@@ -44,7 +44,12 @@ export type PipelineEvent =
   | { type: "resume:complete"; payload: null }
   | { type: "resume:error"; payload: { message: string } }
   | { type: "resume:cancelled"; payload: null }
-  | { type: "pull:progress"; payload: { status: string; completed?: number; total?: number } };
+  | { type: "pull:progress"; payload: { status: string; completed?: number; total?: number } }
+  | { type: "enrichment:generating"; payload: null }
+  | { type: "enrichment:questions"; payload: { questions: EnrichmentQuestion[] } }
+  | { type: "enrichment:extracting"; payload: null }
+  | { type: "enrichment:complete"; payload: { profile: Profile } }
+  | { type: "enrichment:error"; payload: { message: string } };
 
 type UpdateProfileParams = {
   fields: Partial<Pick<Profile, "roles" | "skills_primary" | "skills_secondary" | "experience_years" | "seniority" | "domains" | "preferences">>;
@@ -65,10 +70,13 @@ export type AppRPCSchema = {
       pullOllamaModel: { params: { name: string }; response: { success: boolean; error?: string } };
       setSelectedModel: { params: { model: string }; response: void };
       getSelectedModel: { params: undefined; response: string };
+      getEnrichmentAnswers: { params: { profileId: number }; response: EnrichmentAnswer[] };
     };
     messages: {
       log: { level: string; msg: string };
       pickAndProcessResume: {};
+      generateEnrichmentQuestions: { profileId: number };
+      processEnrichmentAnswers: { profileId: number; answers: EnrichmentAnswer[] };
     };
   };
   webview: {
@@ -102,3 +110,46 @@ export type ProfilePreferences = {
   min_salary: number | null;
   company_sizes: string[];
 };
+
+export type EnrichmentCategory = "career_intent" | "problem_solving" | "technical_depth";
+
+const VALID_CATEGORIES: EnrichmentCategory[] = ["career_intent", "problem_solving", "technical_depth"];
+
+function normalizeCategory(raw: string): EnrichmentCategory {
+  const lower = raw.toLowerCase().replace(/[-\s]/g, "_");
+  if (VALID_CATEGORIES.includes(lower as EnrichmentCategory)) return lower as EnrichmentCategory;
+  if (lower.includes("career") || lower.includes("intent") || lower.includes("dealbreak")) return "career_intent";
+  if (lower.includes("problem") || lower.includes("solving") || lower.includes("story") || lower.includes("stories")) return "problem_solving";
+  return "technical_depth";
+}
+
+export const EnrichmentQuestionsSchema = z.object({
+  questions: z.array(
+    z.object({
+      question: z.string(),
+      category: z.string().transform(normalizeCategory),
+      guided_prompt: z.string(),
+    })
+  ).length(5),
+});
+
+export type EnrichmentQuestion = {
+  question: string;
+  category: EnrichmentCategory;
+  guided_prompt: string;
+};
+
+export type EnrichmentAnswer = {
+  question: string;
+  answer: string;
+  category: string;
+};
+
+export const EnrichmentExtractionSchema = z.object({
+  career_intent: z.string().nullable(),
+  dealbreakers: z.array(z.string()),
+  problem_solving_stories: z.array(z.string()),
+  technical_depth: z.array(z.string()),
+});
+
+export type EnrichmentExtractionResult = z.infer<typeof EnrichmentExtractionSchema>;

@@ -4,15 +4,17 @@ import { SetupWizard } from "./SetupWizard";
 import { ResumeUpload } from "./ResumeUpload";
 import { ProfileReview } from "./ProfileReview";
 import { Dashboard } from "./Dashboard";
+import { ProfileEnrichment } from "./ProfileEnrichment";
 import type { Profile } from "../shared/types";
 
-type AppState = "loading" | "setup" | "upload" | "review" | "dashboard" | "error";
+type AppState = "loading" | "setup" | "upload" | "review" | "enrichment" | "dashboard" | "error";
 
 export function App() {
   const [state, setState] = useState<AppState>("loading");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [resumeText, setResumeText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [enrichmentRegen, setEnrichmentRegen] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -110,6 +112,30 @@ export function App() {
         resumeText={resumeText}
         onSave={(updated) => {
           setProfile(updated);
+          setState("enrichment");
+        }}
+      />
+    );
+  }
+
+  if (state === "enrichment" && !profile) {
+    setError("Profile data was lost. Please upload your resume again.");
+    setState("error");
+    return null;
+  }
+
+  if (state === "enrichment" && profile) {
+    return (
+      <ProfileEnrichment
+        profile={profile}
+        forceRegenerate={enrichmentRegen}
+        onComplete={(updated) => {
+          setProfile(updated);
+          setEnrichmentRegen(false);
+          setState("dashboard");
+        }}
+        onSkip={() => {
+          setEnrichmentRegen(false);
           setState("dashboard");
         }}
       />
@@ -135,6 +161,10 @@ export function App() {
             setError(e.message ?? "Failed to load resume text");
             setState("error");
           }
+        }}
+        onEnrichment={() => {
+          setEnrichmentRegen(true);
+          setState("enrichment");
         }}
         onReset={() => {
           setProfile(null);

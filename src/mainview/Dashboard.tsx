@@ -19,10 +19,11 @@ import type { Profile } from "../shared/types";
 type Props = {
   profile: Profile;
   onEditProfile: () => void;
+  onEnrichment: () => void;
   onReset: () => void;
 };
 
-export function Dashboard({ profile, onEditProfile, onReset }: Props) {
+export function Dashboard({ profile, onEditProfile, onEnrichment, onReset }: Props) {
   const [resetError, setResetError] = useState<string | null>(null);
 
   return (
@@ -117,7 +118,21 @@ export function Dashboard({ profile, onEditProfile, onReset }: Props) {
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PlaceholderCard title="Enrichment Questions" description="Answer follow-up questions to improve scoring accuracy." />
+          <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={onEnrichment}>
+            <CardHeader>
+              <CardTitle className="text-sm">Enrichment Questions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                {profile.career_intent
+                  ? "Re-answer follow-up questions to update scoring."
+                  : "Answer follow-up questions to improve scoring accuracy."}
+              </p>
+              <Badge variant={profile.career_intent ? "secondary" : "default"} className="mt-3 text-xs">
+                {profile.career_intent ? "Completed" : "Start"}
+              </Badge>
+            </CardContent>
+          </Card>
           <PlaceholderCard title="Job Search" description="Discover jobs matching your profile from LinkedIn." />
           <PlaceholderCard title="Fit Scoring" description="AI-powered scoring of how well jobs match your profile." />
           <PlaceholderCard title="Resume Generation" description="Generate tailored resumes for specific job listings." />

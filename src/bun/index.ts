@@ -4,6 +4,7 @@ import { getDb, runMigrations, closeDb } from "./db";
 import { OllamaClient } from "./ollama-client";
 import { extractText, parseResume } from "./resume-parser";
 import { storeProfile, getProfile, updateProfile } from "./profile-store";
+import { generateQuestions, submitEnrichmentAnswers } from "./profile-enrichment";
 import { getResumesDir } from "./paths";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -79,6 +80,12 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
         const row = getDb().query("SELECT value FROM settings WHERE key = 'selected_model'").get() as { value: string } | null;
         return row?.value ?? "";
       },
+      getEnrichmentAnswers: ({ profileId }) => {
+        const rows = getDb().query(
+          "SELECT question, answer, category FROM enrichment_answers WHERE profile_id = ? ORDER BY id"
+        ).all(profileId) as { question: string; answer: string; category: string }[];
+        return rows;
+      },
     },
     messages: {
       "*": (messageName, payload) => {
@@ -86,6 +93,39 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
       },
       log: ({ level, msg }) => {
         console.log(`[webview:${level}] ${msg}`);
+      },
+      generateEnrichmentQuestions: async ({ profileId }) => {
+        try {
+          const profile = getProfile(getDb());
+          if (!profile || profile.id !== profileId) throw new Error("Profile not found");
+          const model = (getDb().query("SELECT value FROM settings WHERE key = 'selected_model'").get() as { value: string }).value;
+          if (!model) throw new Error("No Ollama model selected");
+
+          rpc.send.pipelineUpdate({ type: "enrichment:generating", payload: null });
+          console.log(`[enrichment] Generating questions using model: "${model}"`);
+          const t = performance.now();
+          const questions = await generateQuestions(getDb(), profile, ollama, model);
+          console.log(`[enrichment] Questions generated (${((performance.now() - t) / 1000).toFixed(1)}s)`);
+          rpc.send.pipelineUpdate({ type: "enrichment:questions", payload: { questions } });
+        } catch (err: any) {
+          console.error(`[enrichment] Question generation failed:`, err.message);
+          rpc.send.pipelineUpdate({ type: "enrichment:error", payload: { message: err.message ?? "Failed to generate questions" } });
+        }
+      },
+      processEnrichmentAnswers: async ({ profileId, answers }) => {
+        try {
+          const model = (getDb().query("SELECT value FROM settings WHERE key = 'selected_model'").get() as { value: string }).value;
+          if (!model) throw new Error("No Ollama model selected");
+
+          rpc.send.pipelineUpdate({ type: "enrichment:extracting", payload: null });
+          console.log(`[enrichment] Extracting structured data from ${answers.length} answers`);
+          const t = performance.now();
+          const updated = await submitEnrichmentAnswers(getDb(), profileId, answers, ollama, model);
+          console.log(`[enrichment] Extraction + merge done (${((performance.now() - t) / 1000).toFixed(1)}s)`);
+          rpc.send.pipelineUpdate({ type: "enrichment:complete", payload: { profile: updated } });
+        } catch (err: any) {
+          rpc.send.pipelineUpdate({ type: "enrichment:error", payload: { message: err.message ?? "Failed to process answers" } });
+        }
       },
       pickAndProcessResume: async () => {
         try {
