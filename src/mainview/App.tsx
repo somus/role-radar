@@ -1,32 +1,62 @@
 import { useEffect, useState } from "react";
 import { electrobun } from "./electrobun";
 import { SetupWizard } from "./SetupWizard";
+import { ResumeUpload } from "./ResumeUpload";
+import { ProfileReview } from "./ProfileReview";
+import { Dashboard } from "./Dashboard";
+import type { Profile } from "../shared/types";
 
-type AppState = "loading" | "setup" | "main";
+type AppState = "loading" | "setup" | "upload" | "review" | "dashboard" | "error";
 
 export function App() {
   const [state, setState] = useState<AppState>("loading");
-  const [modelName, setModelName] = useState("");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [resumeText, setResumeText] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
-      const health = await electrobun.rpc.request.getHealth();
-      const savedModel = await electrobun.rpc.request.getSelectedModel();
+      try {
+        const health = await electrobun.rpc.request.getHealth();
+        const savedModel = await electrobun.rpc.request.getSelectedModel();
 
-      if (health.ollama && savedModel) {
-        setModelName(savedModel);
-        setState("main");
-      } else {
-        setState("setup");
+        if (!health.ollama || !savedModel) {
+          setState("setup");
+          return;
+        }
+
+        const existingProfile = await electrobun.rpc.request.getProfile();
+        if (existingProfile) {
+          setProfile(existingProfile);
+          const text = await electrobun.rpc.request.getResumeText();
+          setResumeText(text ?? "");
+          setState("dashboard");
+        } else {
+          setState("upload");
+        }
+      } catch (e: any) {
+        setError(e.message ?? "Failed to initialize app");
+        setState("error");
       }
     }
     init();
   }, []);
 
+  if (state === "error") {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-destructive">{error}</p>
+          <p className="text-sm text-muted-foreground">Please restart the app.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (state === "loading") {
     return (
-      <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
-        <p className="text-zinc-500 animate-pulse">Loading...</p>
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <p className="text-muted-foreground animate-pulse">Loading...</p>
       </div>
     );
   }
@@ -35,26 +65,89 @@ export function App() {
     return (
       <SetupWizard
         onComplete={async () => {
-          const model = await electrobun.rpc.request.getSelectedModel();
-          setModelName(model);
-          setState("main");
+          try {
+            const existingProfile = await electrobun.rpc.request.getProfile();
+            if (existingProfile) {
+              setProfile(existingProfile);
+              const text = await electrobun.rpc.request.getResumeText();
+              setResumeText(text ?? "");
+              setState("dashboard");
+            } else {
+              setState("upload");
+            }
+          } catch (e: any) {
+            setError(e.message ?? "Failed to load profile after setup");
+            setState("error");
+          }
+        }}
+      />
+    );
+  }
+
+  if (state === "upload") {
+    return (
+      <ResumeUpload
+        onComplete={(p, text) => {
+          if (!p) return;
+          setProfile(p);
+          setResumeText(text);
+          setState("review");
+        }}
+      />
+    );
+  }
+
+  if (state === "review" && !profile) {
+    setError("Profile data was lost. Please upload your resume again.");
+    setState("error");
+    return null;
+  }
+
+  if (state === "review" && profile) {
+    return (
+      <ProfileReview
+        profile={profile}
+        resumeText={resumeText}
+        onSave={(updated) => {
+          setProfile(updated);
+          setState("dashboard");
+        }}
+      />
+    );
+  }
+
+  if (state === "dashboard" && !profile) {
+    setError("Profile data was lost. Please upload your resume again.");
+    setState("error");
+    return null;
+  }
+
+  if (state === "dashboard" && profile) {
+    return (
+      <Dashboard
+        profile={profile}
+        onEditProfile={async () => {
+          try {
+            const text = await electrobun.rpc.request.getResumeText();
+            setResumeText(text ?? "");
+            setState("review");
+          } catch (e: any) {
+            setError(e.message ?? "Failed to load resume text");
+            setState("error");
+          }
+        }}
+        onReset={() => {
+          setProfile(null);
+          setResumeText("");
+          setState("upload");
         }}
       />
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
-      <div className="text-center space-y-6">
-        <h1 className="text-4xl font-bold tracking-tight">Role Radar</h1>
-        <p className="text-zinc-400 text-lg">
-          Job Discovery + Fit Scoring + Resume Generator
-        </p>
-        <div className="space-y-2 text-sm text-zinc-400">
-          <p>Model: <span className="text-zinc-200 font-medium">{modelName}</span></p>
-          <p className="text-green-400">Ready — upload your resume to begin</p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+      <p className="text-muted-foreground">Unexpected state. Please restart.</p>
     </div>
   );
 }

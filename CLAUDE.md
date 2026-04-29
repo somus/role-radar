@@ -4,6 +4,14 @@ Local-first job discovery + fit scoring + resume generation app. Bun runtime, Ol
 
 See `PRD.md` for full product requirements. See `CONTEXT.md` for domain language glossary.
 
+## Build system
+
+- **Frontend**: React + Tailwind + shadcn/ui, built with Vite. Output to `dist/`.
+- **Desktop**: Electrobun copies `dist/` to `views/mainview/` during app build. `views: {}` in electrobun.config.ts because Vite handles view builds.
+- **Backend**: Bun bundles `src/bun/index.ts` as main process.
+- **Dev**: `bun run dev` runs `vite build && electrobun dev --watch`.
+- **Path aliases**: `@/` → `src/mainview/` (configured in both vite.config.ts and tsconfig.json).
+
 ## Commit rules
 
 - Never add `Co-Authored-By`, `Generated-By`, or any AI/agent attribution to commit messages.

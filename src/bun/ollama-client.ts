@@ -48,17 +48,41 @@ export class OllamaClient {
     let currentPrompt = prompt;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const res = await this.fetchFn(`${this.baseUrl}/api/generate`, {
-        method: "POST",
-        body: JSON.stringify({
-          model,
-          prompt: currentPrompt,
-          format: "json",
-          stream: false,
-        }),
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 300000);
+
+      let res: Response;
+      try {
+        res = await this.fetchFn(`${this.baseUrl}/api/generate`, {
+          method: "POST",
+          signal: controller.signal,
+          body: JSON.stringify({
+            model,
+            prompt: currentPrompt,
+            format: "json",
+            stream: false,
+            think: false,
+          }),
+        });
+      } catch (e: any) {
+        clearTimeout(timer);
+        if (e.name === "AbortError") throw new Error("Ollama request timed out (5 min). Try a smaller model or enable GPU acceleration.");
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
+
+      if (!res.ok) {
+        const errorBody = await res.text();
+        throw new Error(`Ollama API error (${res.status}): ${errorBody}`);
+      }
 
       const data = (await res.json()) as { response: string };
+
+      if (!data.response) {
+        throw new Error(`Ollama returned empty response for model "${model}"`);
+      }
+
       let parsed: unknown;
 
       try {

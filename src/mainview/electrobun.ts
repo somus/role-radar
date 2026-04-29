@@ -1,7 +1,7 @@
 import { Electroview } from "electrobun/view";
-import type { WebviewRPCSchema } from "../shared/types";
+import type { AppRPCSchema } from "../shared/types";
 
-const rpc = Electroview.defineRPC<WebviewRPCSchema>({
+const rpc = Electroview.defineRPC<AppRPCSchema>({
   handlers: {
     requests: {},
     messages: {
@@ -14,4 +14,5 @@ const rpc = Electroview.defineRPC<WebviewRPCSchema>({
   },
 });
 
-export const electrobun = new Electroview({ rpc });
+const view = new Electroview({ rpc });
+export const electrobun = { rpc: view.rpc! };

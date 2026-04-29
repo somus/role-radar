@@ -9,18 +9,14 @@ export default {
   build: {
     bun: {
       entrypoint: "src/bun/index.ts",
+      external: ["@kreuzberg/node"],
     },
-    views: {
-      mainview: {
-        entrypoint: "src/mainview/main.tsx",
-      },
-    },
+    views: {},
     copy: {
-      "src/mainview/index.html": "views/mainview/index.html",
+      "dist/index.html": "views/mainview/index.html",
+      "dist/assets/": "views/mainview/assets/",
       "migrations/001_init.sql": "migrations/001_init.sql",
+      "node_modules/@kreuzberg/": "node_modules/@kreuzberg/",
     },
-  },
-  scripts: {
-    postBuild: "./scripts/post-build.ts",
   },
 } satisfies ElectrobunConfig;
