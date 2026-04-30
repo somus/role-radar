@@ -6,8 +6,30 @@ import { extractText, parseResume } from "./resume-parser";
 import { storeProfile, getProfile, updateProfile } from "./profile-store";
 import { generateQuestions, submitEnrichmentAnswers } from "./profile-enrichment";
 import { getResumesDir } from "./paths";
+import { LinkedInAdapter, searchCities } from "./linkedin-adapter";
+import { storeJobs, getJobFeed, storeSearchQuery } from "./job-store";
+import type { SelectorConfig } from "../shared/types";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+
+function loadSelectors(): SelectorConfig {
+  const candidates = [
+    join(import.meta.dir, "app", "config", "linkedin-selectors.json"),
+    join(import.meta.dir, "../../config/linkedin-selectors.json"),
+    join(import.meta.dir, "../config/linkedin-selectors.json"),
+    join(import.meta.dir, "config/linkedin-selectors.json"),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      console.log(`[config] Loaded selectors from: ${p}`);
+      return JSON.parse(readFileSync(p, "utf-8"));
+    }
+  }
+  console.error(`[config] Selector candidates tried:`, candidates);
+  throw new Error("linkedin-selectors.json not found in any candidate path");
+}
+
+const linkedInSelectors = loadSelectors();
 
 const migrationResult = runMigrations();
 console.log(`Migrations applied: ${migrationResult.applied}`);
@@ -43,7 +65,14 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
         return row?.resume_text ?? null;
       },
       resetProfile: () => {
-        getDb().query("DELETE FROM profiles").run();
+        const db = getDb();
+        db.query("DELETE FROM scores").run();
+        db.query("DELETE FROM llm_reasoning").run();
+        db.query("DELETE FROM enrichment_answers").run();
+        db.query("DELETE FROM enrichment_questions").run();
+        db.query("DELETE FROM search_queries").run();
+        db.query("DELETE FROM jobs").run();
+        db.query("DELETE FROM profiles").run();
       },
       updateProfile: ({ fields, resumeText }) => {
         return updateProfile(getDb(), fields, resumeText);
@@ -86,6 +115,12 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
         ).all(profileId) as { question: string; answer: string; category: string }[];
         return rows;
       },
+      getJobFeed: (params) => {
+        return getJobFeed(getDb(), params);
+      },
+      searchCities: async ({ query }) => {
+        return searchCities(query);
+      },
     },
     messages: {
       "*": (messageName, payload) => {
@@ -125,6 +160,42 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
           rpc.send.pipelineUpdate({ type: "enrichment:complete", payload: { profile: updated } });
         } catch (err: any) {
           rpc.send.pipelineUpdate({ type: "enrichment:error", payload: { message: err.message ?? "Failed to process answers" } });
+        }
+      },
+      searchJobs: async (query) => {
+        try {
+          rpc.send.pipelineUpdate({ type: "job:searching", payload: { query } });
+          console.log(`[jobs] Searching: ${query.keywords.join(", ")} in "${query.location ?? "anywhere"}"`);
+          const t = performance.now();
+
+          const maxAgeSecs = (linkedInSelectors.maxAgeDays ?? 7) * 86400;
+          const adapter = new LinkedInAdapter({
+            selectors: linkedInSelectors,
+            maxAgeSecs,
+            pagesPerQuery: linkedInSelectors.pagesPerQuery,
+          });
+
+          const parsed = await adapter.search(query);
+          const result = storeJobs(getDb(), parsed);
+          console.log(`[jobs] Found ${parsed.length}, stored ${result.inserted} new (${result.skipped} dupes) (${((performance.now() - t) / 1000).toFixed(1)}s)`);
+
+          const profile = getProfile(getDb());
+          if (profile) {
+            storeSearchQuery(getDb(), profile.id, query);
+          } else {
+            console.warn("[jobs] Search without profile; query not logged");
+          }
+
+          rpc.send.pipelineUpdate({
+            type: "job:search:complete",
+            payload: { total: result.inserted },
+          });
+        } catch (err: any) {
+          console.error(`[jobs] Search failed:`, err.message);
+          rpc.send.pipelineUpdate({
+            type: "job:search:error",
+            payload: { message: err.message ?? "Search failed" },
+          });
         }
       },
       pickAndProcessResume: async () => {

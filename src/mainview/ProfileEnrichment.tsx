@@ -30,6 +30,7 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
   const [error, setError] = useState<string | null>(null);
   const [errorPhase, setErrorPhase] = useState<"generate" | "submit" | null>(null);
   const questionsRef = useRef<EnrichmentQuestion[]>([]);
+  const generationSent = useRef(false);
 
   const form = useForm<FormValues>({ defaultValues: {} });
   const watchedValues = form.watch();
@@ -54,7 +55,7 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
           if (cancelled || saved.length === 0) return;
           const prefilled: FormValues = {};
           for (let i = 0; i < qs.length; i++) {
-            const match = saved.find((s) => s.question === qs[i].question);
+            const match = saved.find((s) => s.question === qs[i]!.question);
             prefilled[`q${i}`] = match?.answer ?? "";
           }
           form.reset(prefilled);
@@ -73,6 +74,7 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
     window.addEventListener("pipeline-update", handlePipelineEvent);
 
     async function init() {
+      if (generationSent.current) return;
       try {
         if (!forceRegenerate) {
           const existing = await electrobun.rpc.request.getEnrichmentAnswers({ profileId: profile.id });
@@ -81,6 +83,7 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
             return;
           }
         }
+        generationSent.current = true;
         electrobun.rpc.send.generateEnrichmentQuestions({ profileId: profile.id });
       } catch (e: any) {
         if (!cancelled) {

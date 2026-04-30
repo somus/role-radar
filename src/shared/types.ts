@@ -49,7 +49,11 @@ export type PipelineEvent =
   | { type: "enrichment:questions"; payload: { questions: EnrichmentQuestion[] } }
   | { type: "enrichment:extracting"; payload: null }
   | { type: "enrichment:complete"; payload: { profile: Profile } }
-  | { type: "enrichment:error"; payload: { message: string } };
+  | { type: "enrichment:error"; payload: { message: string } }
+  | { type: "job:searching"; payload: { query: SearchQuery } }
+  | { type: "job:discovered"; payload: { count: number } }
+  | { type: "job:search:complete"; payload: { total: number } }
+  | { type: "job:search:error"; payload: { message: string } };
 
 type UpdateProfileParams = {
   fields: Partial<Pick<Profile, "roles" | "skills_primary" | "skills_secondary" | "experience_years" | "seniority" | "domains" | "preferences">>;
@@ -71,12 +75,15 @@ export type AppRPCSchema = {
       setSelectedModel: { params: { model: string }; response: void };
       getSelectedModel: { params: undefined; response: string };
       getEnrichmentAnswers: { params: { profileId: number }; response: EnrichmentAnswer[] };
+      getJobFeed: { params: JobFeedParams; response: JobFeedResult };
+      searchCities: { params: { query: string }; response: CityResult[] };
     };
     messages: {
       log: { level: string; msg: string };
       pickAndProcessResume: {};
       generateEnrichmentQuestions: { profileId: number };
       processEnrichmentAnswers: { profileId: number; answers: EnrichmentAnswer[] };
+      searchJobs: SearchQuery;
     };
   };
   webview: {
@@ -153,3 +160,75 @@ export const EnrichmentExtractionSchema = z.object({
 });
 
 export type EnrichmentExtractionResult = z.infer<typeof EnrichmentExtractionSchema>;
+
+export type Job = {
+  id: number;
+  source: string;
+  source_id: string;
+  title: string;
+  company: string | null;
+  location: string | null;
+  url: string | null;
+  posted_at: string | null;
+  status: string;
+  description: string | null;
+  seniority_level: string | null;
+  employment_type: string | null;
+  job_function: string | null;
+  industry: string | null;
+  heuristic_score: number | null;
+  resume_generated: boolean;
+  is_new: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ParsedJob = {
+  sourceId: string;
+  title: string;
+  company: string | null;
+  location: string | null;
+  url: string | null;
+  postedAt: string | null;
+  status: "discovered" | "parse_failed";
+};
+
+export type SelectorConfig = {
+  jobCard: string;
+  title: string;
+  company: string;
+  location: string;
+  url: string;
+  postedTime: string;
+  idAttribute: string;
+  idPattern: string;
+  maxAgeDays?: number;
+  pagesPerQuery?: number;
+};
+
+export type SearchQuery = {
+  keywords: string[];
+  location?: string;
+  geoId?: string;
+  experienceLevel?: string;
+  remote?: boolean;
+  jobTypes?: string[];
+};
+
+export type CityResult = {
+  id: string;
+  name: string;
+  country: string;
+};
+
+export type JobFeedParams = {
+  limit: number;
+  offset: number;
+};
+
+export type JobFeedResult = {
+  jobs: Job[];
+  total: number;
+  hasMore: boolean;
+  failedCount: number;
+};

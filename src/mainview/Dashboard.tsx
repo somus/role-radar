@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { electrobun } from "./electrobun";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { JobSearch } from "./JobSearch";
+import { JobFeed } from "./JobFeed";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +27,12 @@ type Props = {
 
 export function Dashboard({ profile, onEditProfile, onEnrichment, onReset }: Props) {
   const [resetError, setResetError] = useState<string | null>(null);
+  const [feedRefresh, setFeedRefresh] = useState(0);
+  const [hasSearched, setHasSearched] = useState(false);
+  const handleSearchComplete = useCallback(() => {
+    setHasSearched(true);
+    setFeedRefresh(k => k + 1);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -117,7 +125,11 @@ export function Dashboard({ profile, onEditProfile, onEnrichment, onReset }: Pro
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <JobSearch onSearchComplete={handleSearchComplete} />
+
+        <JobFeed refreshKey={feedRefresh} hasSearched={hasSearched} />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={onEnrichment}>
             <CardHeader>
               <CardTitle className="text-sm">Enrichment Questions</CardTitle>
@@ -133,7 +145,6 @@ export function Dashboard({ profile, onEditProfile, onEnrichment, onReset }: Pro
               </Badge>
             </CardContent>
           </Card>
-          <PlaceholderCard title="Job Search" description="Discover jobs matching your profile from LinkedIn." />
           <PlaceholderCard title="Fit Scoring" description="AI-powered scoring of how well jobs match your profile." />
           <PlaceholderCard title="Resume Generation" description="Generate tailored resumes for specific job listings." />
         </div>

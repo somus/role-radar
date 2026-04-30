@@ -1,0 +1,324 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod/v4";
+import { electrobun } from "./electrobun";
+import { TagInput, type Tag } from "emblor";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import {
+  Field,
+  FieldLabel,
+  FieldError,
+} from "@/components/ui/field";
+import type { CityResult } from "../shared/types";
+
+const EXPERIENCE_LEVELS = [
+  { value: "1", label: "Internship" },
+  { value: "2", label: "Entry level" },
+  { value: "3", label: "Associate" },
+  { value: "4", label: "Mid-Senior" },
+  { value: "5", label: "Director" },
+  { value: "6", label: "Executive" },
+];
+
+const JOB_TYPES = [
+  { value: "F", label: "Full-time" },
+  { value: "P", label: "Part-time" },
+  { value: "C", label: "Contract" },
+  { value: "T", label: "Temporary" },
+  { value: "I", label: "Internship" },
+];
+
+const searchFormSchema = z.object({
+  keywords: z.array(z.string()).min(1, "At least one keyword required"),
+  locationText: z.string(),
+  geoId: z.string(),
+  experienceLevel: z.string(),
+  remote: z.boolean(),
+  jobTypes: z.array(z.string()),
+});
+
+type SearchFormValues = z.infer<typeof searchFormSchema>;
+
+function toTags(arr: string[]): Tag[] {
+  return arr.map((text) => ({ id: crypto.randomUUID(), text }));
+}
+
+function fromTags(tags: Tag[]): string[] {
+  return tags.map((t) => t.text);
+}
+
+type Props = {
+  onSearchComplete: () => void;
+};
+
+export function JobSearch({ onSearchComplete }: Props) {
+  const [searching, setSearching] = useState(false);
+  const [result, setResult] = useState<{ total: number } | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [activeKeywordIdx, setActiveKeywordIdx] = useState<number | null>(null);
+
+  const { register, handleSubmit, control, setValue, watch, formState: { errors } } = useForm<SearchFormValues>({
+    resolver: zodResolver(searchFormSchema),
+    defaultValues: {
+      keywords: [],
+      locationText: "",
+      geoId: "",
+      experienceLevel: "",
+      remote: false,
+      jobTypes: [],
+    },
+  });
+
+  const jobTypes = watch("jobTypes");
+
+  useEffect(() => {
+    function handlePipeline(e: Event) {
+      const { type, payload } = (e as CustomEvent).detail;
+      if (type === "job:searching") {
+        setSearching(true);
+        setResult(null);
+        setSearchError(null);
+      } else if (type === "job:search:complete") {
+        setSearching(false);
+        setResult({ total: (payload as { total: number }).total });
+        onSearchComplete();
+      } else if (type === "job:search:error") {
+        setSearching(false);
+        setSearchError((payload as { message: string }).message);
+      }
+    }
+
+    window.addEventListener("pipeline-update", handlePipeline);
+    return () => window.removeEventListener("pipeline-update", handlePipeline);
+  }, [onSearchComplete]);
+
+  function onSubmit(data: SearchFormValues) {
+    setSearchError(null);
+    setResult(null);
+    electrobun.rpc.send.searchJobs({
+      keywords: data.keywords,
+      location: data.locationText.trim() || undefined,
+      geoId: data.geoId || undefined,
+      experienceLevel: data.experienceLevel || undefined,
+      remote: data.remote,
+      jobTypes: data.jobTypes.length > 0 ? data.jobTypes : undefined,
+    });
+  }
+
+  function toggleJobType(value: string) {
+    const current = jobTypes;
+    if (current.includes(value)) {
+      setValue("jobTypes", current.filter(v => v !== value));
+    } else {
+      setValue("jobTypes", [...current, value]);
+    }
+  }
+
+  function handleCitySelect(city: CityResult) {
+    setValue("locationText", `${city.name}, ${city.country}`);
+    setValue("geoId", city.id);
+  }
+
+  function handleLocationClear() {
+    setValue("geoId", "");
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Job Search</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Controller
+              name="keywords"
+              control={control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel className="text-xs">Keywords</FieldLabel>
+                  <TagInput
+                    tags={toTags(field.value)}
+                    setTags={(newTags) => {
+                      const tags = typeof newTags === "function" ? newTags(toTags(field.value)) : newTags;
+                      field.onChange(fromTags(tags));
+                    }}
+                    activeTagIndex={activeKeywordIdx}
+                    setActiveTagIndex={setActiveKeywordIdx}
+                    placeholder="e.g., backend engineer"
+                    styleClasses={{ input: "shadow-none", inlineTagsContainer: "border-input" }}
+                    inlineTags
+                  />
+                  {fieldState.invalid && <FieldError>{fieldState.error?.message}</FieldError>}
+                </Field>
+              )}
+            />
+
+            <Field>
+              <FieldLabel className="text-xs">Location</FieldLabel>
+              <CityAutocomplete
+                value={watch("locationText")}
+                onChange={(text) => { setValue("locationText", text); handleLocationClear(); }}
+                onSelect={handleCitySelect}
+              />
+            </Field>
+          </div>
+
+          <div className="flex items-end gap-3">
+            <Field className="flex-1">
+              <FieldLabel className="text-xs">Experience Level</FieldLabel>
+              <Controller
+                name="experienceLevel"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={(v) => field.onChange(v === "any" ? "" : v)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Any" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      {EXPERIENCE_LEVELS.map((l) => (
+                        <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </Field>
+
+            <div className="flex items-center gap-2 pb-1">
+              <Controller
+                name="remote"
+                control={control}
+                render={({ field }) => (
+                  <Switch
+                    id="remote"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
+              />
+              <FieldLabel htmlFor="remote" className="text-xs">Remote</FieldLabel>
+            </div>
+
+            <Button type="submit" disabled={searching} size="sm">
+              {searching ? "Searching..." : "Search"}
+            </Button>
+          </div>
+
+          <div>
+            <FieldLabel className="text-xs mb-1.5">Job Type</FieldLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {JOB_TYPES.map((jt) => (
+                <Badge
+                  key={jt.value}
+                  variant={jobTypes.includes(jt.value) ? "default" : "outline"}
+                  className="cursor-pointer select-none text-xs"
+                  onClick={() => toggleJobType(jt.value)}
+                >
+                  {jt.label}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          {searchError && <p className="text-xs text-destructive">{searchError}</p>}
+          {result && result.total === 0 && (
+            <p className="text-xs text-muted-foreground">No jobs found. Try different keywords or broaden your filters.</p>
+          )}
+          {result && result.total > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {result.total} new {result.total === 1 ? "job" : "jobs"} found
+            </Badge>
+          )}
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CityAutocomplete({
+  value,
+  onChange,
+  onSelect,
+}: {
+  value: string;
+  onChange: (text: string) => void;
+  onSelect: (city: CityResult) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<CityResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    return () => clearTimeout(debounceRef.current);
+  }, []);
+
+  const fetchCities = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const results = await electrobun.rpc.request.searchCities({ query });
+      setSuggestions(results);
+      setOpen(results.length > 0);
+    } catch {
+      setSuggestions([]);
+    }
+  }, []);
+
+  function handleChange(text: string) {
+    onChange(text);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchCities(text), 300);
+  }
+
+  function handleSelect(city: CityResult) {
+    onSelect(city);
+    setOpen(false);
+    setSuggestions([]);
+  }
+
+  return (
+    <div className="relative">
+      <Input
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
+        placeholder="e.g., San Francisco"
+      />
+      {open && suggestions.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-none border border-input bg-popover/90 backdrop-blur-xl shadow-md max-h-48 overflow-y-auto">
+          {suggestions.map((city) => (
+            <button
+              key={city.id}
+              type="button"
+              className="w-full text-left px-2 py-1.5 text-xs hover:bg-foreground/10 transition-colors"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSelect(city)}
+            >
+              <span className="font-medium">{city.name}</span>
+              {city.country && (
+                <span className="text-muted-foreground ml-1">{city.country}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

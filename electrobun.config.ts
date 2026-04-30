@@ -15,6 +15,7 @@ export default {
     copy: {
       "dist/index.html": "views/mainview/index.html",
       "dist/assets/": "views/mainview/assets/",
+      "config/": "config/",
       "migrations/": "migrations/",
       "node_modules/@kreuzberg/": "node_modules/@kreuzberg/",
     },
