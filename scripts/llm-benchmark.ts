@@ -5,6 +5,8 @@
  *   GEMINI_API_KEY=AI... bun run scripts/llm-benchmark.ts
  */
 
+import pLimit from "p-limit";
+
 // ─── Baseline Scores (human-determined ground truth) ────────────────────────
 
 type BaselineScore = {
@@ -127,6 +129,18 @@ const SAMPLE_PROFILE = `<profile>
   <career_intent>Looking for senior/staff roles at product companies with strong engineering culture</career_intent>
   <dealbreakers>No startups under 20 people, no cryptocurrency companies</dealbreakers>
 </profile>`;
+
+const PROFILE_SUMMARY = [
+  "roles: Senior Backend Engineer, Fullstack Software Engineer",
+  "primary skills: TypeScript, React, Node.js, GraphQL, PostgreSQL",
+  "secondary skills: AWS, Docker, Kubernetes, Redis, Python",
+  "seniority: Senior",
+  "experience: 10 years",
+  "domains: Education, Enterprise SaaS",
+  "preferred locations: Bangalore, Remote",
+  "career intent: senior/staff product-company roles",
+  "dealbreakers: no startups under 20 people; no cryptocurrency companies",
+].join("\n");
 
 const SAMPLE_JOBS = [
   {
@@ -830,27 +844,23 @@ const SCORING_PROMPT = `You are a job fit scorer. Score each job against the can
 - domain: how well the candidate's domain experience matches
 - location: whether location/remote preferences match
 
+Calibration:
+- Give partial skill credit for adjacent web, product, mobile, data, or platform roles. Reserve 0-19 for truly unrelated platforms like COBOL/mainframe or embedded C++.
+- Mobile/iOS/Android roles with React, TypeScript, or product-engineering overlap are usually partial skill matches (roughly 25-45), not zero.
+- Candidate is Senior with 10 years. Junior, intern, and 0-2 year roles should score very low on seniority and usually set overqualified=true. Mid-level roles can still be moderate.
+- Some 3-5 year mid-level roles can still be overqualified if the role is clearly below candidate scope.
+- Different specialization alone does not mean overqualified.
+- Use specialization_fit_hint. core_match can score high. hybrid_adjacent is usually moderate. adjacent_specialization should usually keep skills and seniority in partial-credit ranges even when overqualified=false.
+- Education and Enterprise SaaS are strongest domains. CRM, analytics, HR tech, travel, gaming, healthcare, social, and logistics are low-to-moderate partial credit. Consulting/services roles are lower than product-company domain matches. Crypto domain = 0 because candidate explicitly rejects crypto.
+- Use location_fit_hint. Bangalore or Remote = 100. Bangalore hybrid is usually 80-90. Other India cities are partial matches and usually score 30-70, not 0.
+
 Also provide:
 - composite: weighted average (skills×0.4 + seniority×0.2 + domain×0.15 + location×0.25)
 - overqualified: true if the candidate is significantly overqualified for this role
-- matches: array of 2-4 key matching skills/experiences (strings)
-- gaps: array of 1-3 missing requirements or concerns (strings)
+- matches: array of exactly 2 key matching skills/experiences (strings)
+- gaps: array of 1-2 missing requirements or concerns (strings)
 
 Return a JSON array with one object per job. Each object must have: jobId, skills, seniority, domain, location, composite, overqualified, matches, gaps.`;
-
-const SINGLE_JOB_PROMPT = `You are a job fit scorer. Score this job against the candidate profile on 4 dimensions (0-100):
-- skills: how well the candidate's skills match job requirements
-- seniority: whether the candidate's seniority level is appropriate (low score if overqualified or underqualified)
-- domain: how well the candidate's domain experience matches
-- location: whether location/remote preferences match
-
-Also provide:
-- composite: weighted average (skills×0.4 + seniority×0.2 + domain×0.15 + location×0.25)
-- overqualified: true if the candidate is significantly overqualified for this role
-- matches: array of 2-4 key matching skills/experiences (strings)
-- gaps: array of 1-3 missing requirements or concerns (strings)
-
-Return a single JSON object with: jobId, skills, seniority, domain, location, composite, overqualified, matches, gaps.`;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -886,6 +896,17 @@ type BenchmarkResult = {
   jsonValid: boolean;
   jobsScored: number;
   scores: JobScore[];
+  repeatSummary?: {
+    objectiveMean: number;
+    objectiveMedian: number;
+    objectiveRange: number;
+    deviationMean: number;
+    timeMeanMs: number;
+    inputTokensMean: number;
+    outputTokensMean: number;
+    oqCorrectMean: number;
+    jobsScoredMean: number;
+  };
   error?: string;
 };
 
@@ -895,15 +916,140 @@ function generateJobs(count: number): typeof SAMPLE_JOBS {
   return SAMPLE_JOBS.slice(0, count);
 }
 
+const SKILL_PATTERNS: Array<[string, RegExp]> = [
+  ["TypeScript", /typescript/i],
+  ["React", /react(?! native)/i],
+  ["React Native", /react native/i],
+  ["Node.js", /node\.js|nodejs/i],
+  ["GraphQL", /graphql/i],
+  ["PostgreSQL", /postgresql/i],
+  ["AWS", /\baws\b|ec2|s3|redshift|glue|emr|sagemaker/i],
+  ["Docker", /docker/i],
+  ["Kubernetes", /kubernetes|k8s/i],
+  ["Redis", /redis/i],
+  ["Python", /python/i],
+  ["Java", /java|spring boot/i],
+  ["Go", /\bgo\b|golang/i],
+  ["Terraform", /terraform/i],
+  ["TailwindCSS", /tailwind/i],
+  ["Web3", /web3|walletconnect|metamask|blockchain/i],
+  ["Swift", /swift|swiftui|uikit|spritekit|metal/i],
+  ["PHP", /php|laravel/i],
+  ["PyTorch", /pytorch/i],
+  ["TensorFlow", /tensorflow/i],
+  ["Rust", /rust/i],
+  ["C++", /c\+\+|rtos|can bus|autosar/i],
+  ["Kotlin", /kotlin|jetpack compose|android/i],
+  ["Spark", /spark/i],
+  ["Kafka", /kafka/i],
+  ["Ruby on Rails", /ruby on rails|\bruby\b/i],
+  ["Salesforce", /salesforce|apex|soql|lightning web components/i],
+  ["Vue.js", /vue\.js|\bvue\b/i],
+  ["Elasticsearch", /elasticsearch|algolia/i],
+  ["COBOL", /cobol|jcl|db2|mainframe|z\/os/i],
+];
+
+const DOMAIN_PATTERNS: Array<[string, RegExp]> = [
+  ["Education", /education|edtech|learning|student|university|k-12|learner|lms/i],
+  ["Enterprise SaaS", /enterprise saas|multi-tenant saas|helpdesk|subscription management|b2b saas/i],
+  ["CRM", /crm|sales cloud|service cloud|marketing cloud|salesforce/i],
+  ["HR Tech", /hr tech|hr analytics|workforce planning/i],
+  ["Fintech", /fintech|payments|billing|merchant|banking|trading/i],
+  ["E-commerce", /e-commerce|commerce|checkout|storefront|marketplace/i],
+  ["Crypto", /crypto|cryptocurrency|defi|blockchain|exchange|web3|token/i],
+  ["Developer Tools", /developer experience|developer platform|devops|platform engineering|jira|confluence|bitbucket/i],
+  ["Healthcare", /healthcare|ehr|hospital|hipaa|clinical/i],
+  ["Gaming", /gaming|game studio|app store|spritekit|metal/i],
+  ["Social Media", /social media|short-form video|community features/i],
+  ["Logistics", /logistics|shipment|supply chain|carrier/i],
+  ["Travel", /travel|booking|tourism|property|hotel|homestay/i],
+  ["Analytics", /analytics|dashboard|event|warehouse|redshift|spark|kafka/i],
+  ["Consulting", /consulting partner|consulting firm|enterprise clients|client requirement gathering/i],
+  ["Automotive", /automotive|vehicle|adas|lidar|radar|ecu/i],
+  ["Real Estate", /real estate|property listing|virtual tour/i],
+];
+
+const ROLE_PATTERNS: Array<[string, RegExp]> = [
+  ["Backend", /backend|api|microservice|distributed systems/i],
+  ["Frontend", /frontend|ui|dashboard|d3|recharts/i],
+  ["Fullstack", /full stack|fullstack/i],
+  ["Platform", /platform|infrastructure|devops|sre/i],
+  ["Mobile", /ios|android|mobile|react native/i],
+  ["Data", /data engineer|etl|pipeline|warehouse|analytics/i],
+  ["ML", /machine learning|ml engineer|recommendation|pytorch|tensorflow/i],
+  ["Systems", /systems|embedded|low-latency|matching engine|firmware/i],
+];
+
+const SIGNAL_PATTERNS: Array<[string, RegExp]> = [
+  ["remote", /\bremote\b/i],
+  ["hybrid", /hybrid/i],
+  ["on-site", /on-site|onsite/i],
+  ["startup", /startup|seed-stage|fast-growing|\b8-person\b|\b15-person\b/i],
+  ["consulting", /consulting partner|consulting firm|enterprise clients/i],
+  ["junior", /junior|intern|entry-level|fresh graduates|0-2 years/i],
+  ["mid-level", /3-5 years|4\+ years|mid-level|mid-senior/i],
+  ["senior", /senior|7\+ years|8\+ years/i],
+  ["staff", /staff|10\+ years|architect/i],
+];
+
+function extractLabels(text: string, patterns: Array<[string, RegExp]>, limit: number): string[] {
+  const labels: string[] = [];
+  for (const [label, pattern] of patterns) {
+    if (pattern.test(text)) labels.push(label);
+    if (labels.length >= limit) break;
+  }
+  return labels;
+}
+
+function extractExperience(text: string): string[] {
+  const matches = [...text.matchAll(/(\d+\+?\s*(?:-|to)?\s*\d*\+?\s*years?)/gi)]
+    .map((m) => m[1]?.replace(/\s+/g, " ").trim())
+    .filter(Boolean) as string[];
+  return [...new Set(matches)].slice(0, 3);
+}
+
+function locationFitHint(location: string): string {
+  const lower = location.toLowerCase();
+  if (lower.includes("remote")) return "remote_exact";
+  if (lower.includes("bangalore") && lower.includes("hybrid")) return "bangalore_hybrid_partial";
+  if (lower.includes("bangalore")) return "bangalore_exact";
+  if (lower.includes("india")) return "india_other_city_partial";
+  return "outside_preferred_region_low";
+}
+
+function specializationFitHint(roles: string[]): string {
+  const hasCore = roles.some((role) => ["Backend", "Frontend", "Fullstack", "Platform"].includes(role));
+  const hasAdjacent = roles.some((role) => ["Mobile", "Data", "ML", "Systems"].includes(role));
+  if (hasCore && hasAdjacent) return "hybrid_adjacent";
+  if (hasCore) return "core_match";
+  if (hasAdjacent) return "adjacent_specialization";
+  return "unknown";
+}
+
+function summarizeJob(job: typeof SAMPLE_JOBS[number]): string {
+  const text = `${job.title}\n${job.company}\n${job.location}\n${job.description}`;
+  const roles = extractLabels(text, ROLE_PATTERNS, 3);
+  const skills = extractLabels(text, SKILL_PATTERNS, 10);
+  const domains = extractLabels(text, DOMAIN_PATTERNS, 4);
+  const signals = extractLabels(text, SIGNAL_PATTERNS, 6);
+  const experience = extractExperience(text);
+
+  return `  <job id="${job.id}">
+    <title>${job.title}</title>
+    <company>${job.company}</company>
+    <location>${job.location}</location>
+    <location_fit_hint>${locationFitHint(job.location)}</location_fit_hint>
+    <role_tags>${roles.join(", ") || "unknown"}</role_tags>
+    <specialization_fit_hint>${specializationFitHint(roles)}</specialization_fit_hint>
+    <experience>${experience.join(", ") || "unknown"}</experience>
+    <skills>${skills.join(", ") || "unknown"}</skills>
+    <domains>${domains.join(", ") || "unknown"}</domains>
+    <signals>${signals.join(", ") || "unknown"}</signals>
+  </job>`;
+}
+
 function buildBatchInput(jobs: typeof SAMPLE_JOBS): string {
-  const jobsXml = jobs.map(
-    (j) => `  <job id="${j.id}">
-    <title>${j.title}</title>
-    <company>${j.company}</company>
-    <location>${j.location}</location>
-    <description>${j.description}</description>
-  </job>`
-  ).join("\n");
+  const jobsXml = jobs.map((j) => summarizeJob(j)).join("\n");
 
   return `${SCORING_PROMPT}\n\n${SAMPLE_PROFILE}\n\n<jobs>\n${jobsXml}\n</jobs>`;
 }
@@ -919,6 +1065,28 @@ type CallResult = {
 };
 
 const REQUEST_TIMEOUT_MS = 120_000;
+const BATCH10_PARALLEL_CONCURRENCY = 10;
+const TRACE_BATCH10_REPEATS = process.env.TRACE_BATCH10_REPEATS === "1";
+
+const GEMINI_SCORE_SCHEMA = {
+  type: "ARRAY",
+  items: {
+    type: "OBJECT",
+    propertyOrdering: ["jobId", "skills", "seniority", "domain", "location", "composite", "overqualified", "matches", "gaps"],
+    required: ["jobId", "skills", "seniority", "domain", "location", "composite", "overqualified", "matches", "gaps"],
+    properties: {
+      jobId: { type: "STRING" },
+      skills: { type: "INTEGER", minimum: 0, maximum: 100 },
+      seniority: { type: "INTEGER", minimum: 0, maximum: 100 },
+      domain: { type: "INTEGER", minimum: 0, maximum: 100 },
+      location: { type: "INTEGER", minimum: 0, maximum: 100 },
+      composite: { type: "INTEGER", minimum: 0, maximum: 100 },
+      overqualified: { type: "BOOLEAN" },
+      matches: { type: "ARRAY", minItems: 2, maxItems: 2, items: { type: "STRING" } },
+      gaps: { type: "ARRAY", minItems: 1, maxItems: 2, items: { type: "STRING" } },
+    },
+  },
+} as const;
 
 async function callOpenAICompatible(config: ProviderConfig, prompt: string): Promise<CallResult> {
   const start = performance.now();
@@ -997,7 +1165,10 @@ async function callOpenAICompatible(config: ProviderConfig, prompt: string): Pro
 async function callGemini(config: ProviderConfig, prompt: string): Promise<CallResult> {
   const start = performance.now();
 
-  const genConfig: any = { responseMimeType: "application/json" };
+  const genConfig: any = {
+    responseMimeType: "application/json",
+    responseSchema: GEMINI_SCORE_SCHEMA,
+  };
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`,
@@ -1024,9 +1195,125 @@ async function callGemini(config: ProviderConfig, prompt: string): Promise<CallR
   return { text, inputTokens, outputTokens, totalMs, firstTokenMs: null };
 }
 
+async function callGeminiStream(config: ProviderConfig, prompt: string): Promise<CallResult> {
+  const start = performance.now();
+  let firstTokenMs: number | null = null;
+
+  const genConfig: any = {
+    responseMimeType: "application/json",
+    responseSchema: GEMINI_SCORE_SCHEMA,
+  };
+
+  const progressInterval = setInterval(() => {
+    const elapsed = Math.round((performance.now() - start) / 1000);
+    process.stdout.write(`\r    ⏳ ${elapsed}s elapsed...`);
+  }, 5000);
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:streamGenerateContent?alt=sse&key=${config.apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: genConfig,
+        }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      }
+    );
+  } catch (err) {
+    clearInterval(progressInterval);
+    process.stdout.write("\r" + " ".repeat(40) + "\r");
+    throw err;
+  }
+
+  if (!res.ok) {
+    clearInterval(progressInterval);
+    process.stdout.write("\r" + " ".repeat(40) + "\r");
+    const err = await res.text();
+    throw new Error(`Gemini ${res.status}: ${err.substring(0, 300)}`);
+  }
+
+  let text = "";
+  let inputTokens = 0;
+  let outputTokens = 0;
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const processLine = (line: string) => {
+    if (!line.startsWith("data: ")) return;
+    const payload = line.slice(6).trim();
+    if (!payload || payload === "[DONE]") return;
+
+    try {
+      const data = JSON.parse(payload);
+      const delta = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (delta) {
+        if (firstTokenMs === null) firstTokenMs = performance.now() - start;
+        text += delta;
+      }
+      if (data.usageMetadata) {
+        inputTokens = data.usageMetadata.promptTokenCount ?? inputTokens;
+        outputTokens = data.usageMetadata.candidatesTokenCount ?? outputTokens;
+      }
+    } catch {}
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? "";
+    for (const line of lines) processLine(line);
+  }
+
+  if (buffer) processLine(buffer);
+
+  clearInterval(progressInterval);
+  process.stdout.write("\r" + " ".repeat(40) + "\r");
+  const totalMs = performance.now() - start;
+  if (!inputTokens) inputTokens = Math.ceil(prompt.length / 4);
+  if (!outputTokens) outputTokens = Math.ceil(text.length / 4);
+  return { text, inputTokens, outputTokens, totalMs, firstTokenMs };
+}
+
 async function callProvider(config: ProviderConfig, prompt: string): Promise<CallResult> {
   if (config.isGemini) return callGemini(config, prompt);
   return callOpenAICompatible(config, prompt);
+}
+
+async function scoreJobsIndividually(config: ProviderConfig, jobs: typeof SAMPLE_JOBS): Promise<CallResult & { scores: JobScore[] }> {
+  const limit = pLimit(BATCH10_PARALLEL_CONCURRENCY);
+  const start = performance.now();
+
+  const perJob = await Promise.all(
+    jobs.map((job) => limit(async () => {
+      const res = config.isGemini
+        ? await callGeminiStream(config, buildBatchInput([job]))
+        : await callProvider(config, buildBatchInput([job]));
+      const scores = parseScores(res.text);
+      return { res, scores };
+    }))
+  );
+
+  const scores = perJob.flatMap((item) => item.scores);
+  const inputTokens = perJob.reduce((sum, item) => sum + item.res.inputTokens, 0);
+  const outputTokens = perJob.reduce((sum, item) => sum + item.res.outputTokens, 0);
+  const firstTokenCandidates = perJob.map((item) => item.res.firstTokenMs).filter((v): v is number => v !== null);
+
+  return {
+    text: JSON.stringify(scores),
+    inputTokens,
+    outputTokens,
+    totalMs: performance.now() - start,
+    firstTokenMs: firstTokenCandidates.length > 0 ? Math.min(...firstTokenCandidates) : null,
+    scores,
+  };
 }
 
 // ─── Score Parsing & Validation ─────────────────────────────────────────────
@@ -1117,6 +1404,40 @@ function scoreAccuracy(actual: JobScore[], baselines: BaselineScore[]): { avgDev
 // ─── Benchmark Runner ───────────────────────────────────────────────────────
 
 const BATCH_SIZES = [5, 10, 15, 20, 25];
+const BATCH10_REPEAT_COUNT = 3;
+
+async function runSingleSizeBenchmark(config: ProviderConfig, size: number): Promise<BenchmarkResult> {
+  const jobs = generateJobs(size);
+  const prompt = buildBatchInput(jobs);
+  const perJobStrategy = size === 10;
+  const res = perJobStrategy ? await scoreJobsIndividually(config, jobs) : await callProvider(config, prompt);
+  const scores = perJobStrategy ? res.scores : parseScores(res.text);
+  const tokPerSec = res.outputTokens / (res.totalMs / 1000);
+
+  return {
+    provider: config.name,
+    model: config.model,
+    test: `batch_${size}`,
+    inputTokens: res.inputTokens,
+    outputTokens: res.outputTokens,
+    totalTimeMs: Math.round(res.totalMs),
+    firstTokenMs: res.firstTokenMs ? Math.round(res.firstTokenMs) : null,
+    tokensPerSec: Math.round(tokPerSec),
+    jsonValid: scores.length > 0,
+    jobsScored: scores.length,
+    scores,
+  };
+}
+
+function objectiveForResult(result: BenchmarkResult): number {
+  if (result.error || result.scores.length === 0) return Number.POSITIVE_INFINITY;
+  const acc = scoreAccuracy(result.scores, BASELINES);
+  return acc.avgDeviation + (result.totalTimeMs / 1000);
+}
+
+function mean(values: number[]): number {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
 
 async function runBenchmark(config: ProviderConfig): Promise<BenchmarkResult[]> {
   const results: BenchmarkResult[] = [];
@@ -1124,22 +1445,45 @@ async function runBenchmark(config: ProviderConfig): Promise<BenchmarkResult[]> 
   for (const size of BATCH_SIZES) {
     console.log(`  [${config.name}] Batch ${size} jobs...`);
     try {
-      const jobs = generateJobs(size);
-      const prompt = buildBatchInput(jobs);
-      const res = await callProvider(config, prompt);
-      const scores = parseScores(res.text);
-      const tokPerSec = res.outputTokens / (res.totalMs / 1000);
-      const perJob = Math.round(res.totalMs / size);
+      let result: BenchmarkResult;
+      if (size === 10) {
+        const repeats: BenchmarkResult[] = [];
+        for (let i = 0; i < BATCH10_REPEAT_COUNT; i++) {
+          const repeat = await runSingleSizeBenchmark(config, size);
+          repeats.push(repeat);
+          if (TRACE_BATCH10_REPEATS) {
+            const acc = scoreAccuracy(repeat.scores, BASELINES);
+            console.log(`    ↺ repeat ${i + 1}: objective=${objectiveForResult(repeat).toFixed(3)} time=${repeat.totalTimeMs}ms deviation=${acc.avgDeviation} oq=${acc.oqCorrect}/${acc.total} scored=${repeat.scores.length}`);
+          }
+        }
+        const repeatObjectives = repeats.map((repeat) => objectiveForResult(repeat));
+        const repeatDeviations = repeats.map((repeat) => scoreAccuracy(repeat.scores, BASELINES).avgDeviation);
+        const repeatOqCorrect = repeats.map((repeat) => scoreAccuracy(repeat.scores, BASELINES).oqCorrect);
+        const sorted = [...repeats].sort((a, b) => objectiveForResult(a) - objectiveForResult(b));
+        result = {
+          ...sorted[Math.floor(sorted.length / 2)]!,
+          repeatSummary: {
+            objectiveMean: mean(repeatObjectives),
+            objectiveMedian: [...repeatObjectives].sort((a, b) => a - b)[Math.floor(repeatObjectives.length / 2)]!,
+            objectiveRange: Math.max(...repeatObjectives) - Math.min(...repeatObjectives),
+            deviationMean: mean(repeatDeviations),
+            timeMeanMs: mean(repeats.map((repeat) => repeat.totalTimeMs)),
+            inputTokensMean: mean(repeats.map((repeat) => repeat.inputTokens)),
+            outputTokensMean: mean(repeats.map((repeat) => repeat.outputTokens)),
+            oqCorrectMean: mean(repeatOqCorrect),
+            jobsScoredMean: mean(repeats.map((repeat) => repeat.jobsScored)),
+          },
+        };
+        console.log(`    ↺ median-of-${BATCH10_REPEAT_COUNT} selected`);
+        console.log(`    ↺ mean objective=${result.repeatSummary.objectiveMean.toFixed(3)} range=${result.repeatSummary.objectiveRange.toFixed(3)}`);
+      } else {
+        result = await runSingleSizeBenchmark(config, size);
+      }
 
-      results.push({
-        provider: config.name, model: config.model, test: `batch_${size}`,
-        inputTokens: res.inputTokens, outputTokens: res.outputTokens,
-        totalTimeMs: Math.round(res.totalMs),
-        firstTokenMs: res.firstTokenMs ? Math.round(res.firstTokenMs) : null,
-        tokensPerSec: Math.round(tokPerSec),
-        jsonValid: scores.length > 0, jobsScored: scores.length, scores,
-      });
-      console.log(`    → ${Math.round(res.totalMs)}ms (${perJob}ms/job), ${Math.round(tokPerSec)} tok/s, JSON: ${scores.length > 0 ? "✓" : "✗"} (${scores.length}/${size} jobs)`);
+      const perJob = Math.round(result.totalTimeMs / size);
+
+      results.push(result);
+      console.log(`    → ${result.totalTimeMs}ms (${perJob}ms/job), ${result.tokensPerSec} tok/s, JSON: ${result.scores.length > 0 ? "✓" : "✗"} (${result.scores.length}/${size} jobs)`);
     } catch (err: any) {
       console.log(`    → ERROR: ${err.message.substring(0, 100)}`);
       results.push({
@@ -1284,6 +1628,13 @@ function printResults(allResults: BenchmarkResult[]) {
 
   console.log("│");
   console.log("└" + "─".repeat(130));
+
+  for (const r of allResults) {
+    if (r.test !== "batch_10" || !r.repeatSummary) continue;
+    console.log(
+      `BATCH10_AGGREGATE provider=${JSON.stringify(r.provider)} mean_objective=${r.repeatSummary.objectiveMean.toFixed(3)} median_objective=${r.repeatSummary.objectiveMedian.toFixed(3)} objective_range=${r.repeatSummary.objectiveRange.toFixed(3)} mean_deviation=${r.repeatSummary.deviationMean.toFixed(3)} mean_time_ms=${Math.round(r.repeatSummary.timeMeanMs)} mean_input_tokens=${Math.round(r.repeatSummary.inputTokensMean)} mean_output_tokens=${Math.round(r.repeatSummary.outputTokensMean)} mean_oq_correct=${r.repeatSummary.oqCorrectMean.toFixed(3)} mean_jobs_scored=${r.repeatSummary.jobsScoredMean.toFixed(3)}`
+    );
+  }
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────
