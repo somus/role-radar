@@ -117,6 +117,7 @@ describe("profile store", () => {
       remote: true,
       min_salary: null,
       company_sizes: [],
+      country: null,
     },
   };
 

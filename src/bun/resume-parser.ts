@@ -1,4 +1,4 @@
-import type { OllamaClient } from "./ollama-client";
+import type { GeminiClient } from "./gemini-client";
 import { ResumeParseResultSchema, type ResumeParseResult } from "../shared/types";
 
 export async function extractText(pdfBytes: Uint8Array): Promise<string> {
@@ -13,8 +13,9 @@ export async function extractText(pdfBytes: Uint8Array): Promise<string> {
   try {
     const result = extractFileSync(tempPath, null, {
       ocr: {
-        backend: "paddle-ocr",
-        language: "en",
+        backend: "tesseract",
+        language: "eng",
+        dpi: 150,
       },
     });
 
@@ -39,6 +40,7 @@ Rules:
 - domains: industries or verticals (e.g., "Fintech", "Healthcare", "AdTech")
 - preferences.locations: cities/regions mentioned in resume header or context
 - preferences.remote: true if resume mentions remote work preference, false otherwise
+- preferences.country: infer the country from locations/address in resume (e.g., "India", "United States", "Germany"). null if cannot be determined
 - preferences.min_salary: always null (cannot be inferred from resume)
 - preferences.company_sizes: always empty array (cannot be inferred from resume)
 
@@ -47,8 +49,7 @@ Resume text:
 
 export async function parseResume(
   text: string,
-  ollama: OllamaClient,
-  model: string
+  gemini: GeminiClient
 ): Promise<ResumeParseResult> {
-  return ollama.infer(PARSE_PROMPT + text, ResumeParseResultSchema, model);
+  return gemini.infer(PARSE_PROMPT + text, ResumeParseResultSchema);
 }

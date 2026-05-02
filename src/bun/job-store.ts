@@ -65,12 +65,13 @@ export function getJobFeed(
 export function storeSearchQuery(
   db: Database,
   profileId: number,
-  query: SearchQuery
+  query: SearchQuery,
+  queryType: string = "precise"
 ): void {
   db.query(`
-    INSERT INTO search_queries (profile_id, keywords, location, experience_level)
-    VALUES (?, ?, ?, ?)
-  `).run(profileId, query.keywords.join(", "), query.location ?? null, query.experienceLevel ?? null);
+    INSERT INTO search_queries (profile_id, keywords, location, experience_level, query_type)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(profileId, query.keywords.join(", "), query.location ?? null, query.experienceLevel ?? null, queryType);
 }
 
 function deserializeJob(row: any): Job {

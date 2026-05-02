@@ -115,6 +115,7 @@ function deserializeProfile(row: Record<string, unknown>): Profile {
       remote: false,
       min_salary: null,
       company_sizes: [],
+      country: null,
       ...safeParseJson<Partial<ProfilePreferences>>(row.preferences, {}),
     },
     career_intent: (row.career_intent as string) ?? null,

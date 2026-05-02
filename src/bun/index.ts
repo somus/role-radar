@@ -1,13 +1,15 @@
 import { BrowserWindow, BrowserView, Utils } from "electrobun/bun";
-import type { AppRPCSchema } from "../shared/types";
+import type { AppRPCSchema, SearchQuery } from "../shared/types";
 import { getDb, runMigrations, closeDb } from "./db";
-import { OllamaClient } from "./ollama-client";
+import { GeminiClient } from "./gemini-client";
 import { extractText, parseResume } from "./resume-parser";
 import { storeProfile, getProfile, updateProfile } from "./profile-store";
 import { generateQuestions, submitEnrichmentAnswers } from "./profile-enrichment";
+import { generateSearchQueries } from "./query-generator";
 import { getResumesDir } from "./paths";
 import { LinkedInAdapter, searchCities } from "./linkedin-adapter";
 import { storeJobs, getJobFeed, storeSearchQuery } from "./job-store";
+import { getSecret, storeSecret, deleteSecret } from "./secret-store";
 import type { SelectorConfig } from "../shared/types";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -40,19 +42,33 @@ if (pdfRow?.resume_pdf_path && !existsSync(pdfRow.resume_pdf_path)) {
   console.log(`[startup] Cleared stale resume_pdf_path for profile ${pdfRow.id}`);
 }
 
-const ollama = new OllamaClient();
+const API_KEY_NAME = "gemini_api_key_enc";
+let lastPagesPerQuery = 0;
+let lastSearchTime = 0;
+
+function getGemini(): GeminiClient | null {
+  const key = getSecret(getDb(), API_KEY_NAME);
+  return key ? new GeminiClient(key) : null;
+}
+
+function requireGemini(): GeminiClient {
+  const client = getGemini();
+  if (!client) throw new Error("No Gemini API key configured. Go to setup.");
+  return client;
+}
 
 const rpc = BrowserView.defineRPC<AppRPCSchema>({
   maxRequestTime: 120000,
   handlers: {
     requests: {
       getHealth: async () => {
-        const ollamaOk = await ollama.checkHealth();
+        const gemini = getGemini();
+        const geminiOk = gemini ? await gemini.checkHealth() : false;
         try {
           getDb().query("SELECT 1").get();
-          return { ollama: ollamaOk, db: true };
+          return { gemini: geminiOk, db: true };
         } catch {
-          return { ollama: ollamaOk, db: false };
+          return { gemini: geminiOk, db: false };
         }
       },
       getProfile: () => {
@@ -80,34 +96,16 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
       runMigrations: () => {
         return runMigrations();
       },
-      checkOllama: async () => {
-        return await ollama.checkHealth();
+      hasApiKey: () => {
+        return getSecret(getDb(), API_KEY_NAME) !== null;
       },
-      listOllamaModels: async () => {
-        try {
-          return await ollama.listModels();
-        } catch (err) {
-          console.error("[ollama] Failed to list models:", err);
-          return [];
+      setApiKey: async ({ key }) => {
+        const client = new GeminiClient(key);
+        const valid = await client.checkHealth();
+        if (valid) {
+          storeSecret(getDb(), API_KEY_NAME, key);
         }
-      },
-      pullOllamaModel: async ({ name }) => {
-        try {
-          for await (const event of ollama.pullModel(name)) {
-            rpc.send.pipelineUpdate({ type: "pull:progress", payload: { status: event.status, completed: event.completed, total: event.total } });
-            console.log(`[pull] ${event.status} ${event.completed ?? ""}/${event.total ?? ""}`);
-          }
-          return { success: true };
-        } catch (err: any) {
-          return { success: false, error: err.message };
-        }
-      },
-      setSelectedModel: ({ model }) => {
-        getDb().query("UPDATE settings SET value = ? WHERE key = 'selected_model'").run(model);
-      },
-      getSelectedModel: () => {
-        const row = getDb().query("SELECT value FROM settings WHERE key = 'selected_model'").get() as { value: string } | null;
-        return row?.value ?? "";
+        return { valid };
       },
       getEnrichmentAnswers: ({ profileId }) => {
         const rows = getDb().query(
@@ -133,13 +131,12 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
         try {
           const profile = getProfile(getDb());
           if (!profile || profile.id !== profileId) throw new Error("Profile not found");
-          const model = (getDb().query("SELECT value FROM settings WHERE key = 'selected_model'").get() as { value: string }).value;
-          if (!model) throw new Error("No Ollama model selected");
+          const gemini = requireGemini();
 
           rpc.send.pipelineUpdate({ type: "enrichment:generating", payload: null });
-          console.log(`[enrichment] Generating questions using model: "${model}"`);
+          console.log("[enrichment] Generating questions");
           const t = performance.now();
-          const questions = await generateQuestions(getDb(), profile, ollama, model);
+          const questions = await generateQuestions(getDb(), profile, gemini);
           console.log(`[enrichment] Questions generated (${((performance.now() - t) / 1000).toFixed(1)}s)`);
           rpc.send.pipelineUpdate({ type: "enrichment:questions", payload: { questions } });
         } catch (err: any) {
@@ -149,13 +146,12 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
       },
       processEnrichmentAnswers: async ({ profileId, answers }) => {
         try {
-          const model = (getDb().query("SELECT value FROM settings WHERE key = 'selected_model'").get() as { value: string }).value;
-          if (!model) throw new Error("No Ollama model selected");
+          const gemini = requireGemini();
 
           rpc.send.pipelineUpdate({ type: "enrichment:extracting", payload: null });
           console.log(`[enrichment] Extracting structured data from ${answers.length} answers`);
           const t = performance.now();
-          const updated = await submitEnrichmentAnswers(getDb(), profileId, answers, ollama, model);
+          const updated = await submitEnrichmentAnswers(getDb(), profileId, answers, gemini);
           console.log(`[enrichment] Extraction + merge done (${((performance.now() - t) / 1000).toFixed(1)}s)`);
           rpc.send.pipelineUpdate({ type: "enrichment:complete", payload: { profile: updated } });
         } catch (err: any) {
@@ -198,6 +194,117 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
           });
         }
       },
+      generateAndSearch: async ({ profileId }) => {
+        try {
+          const profile = getProfile(getDb());
+          if (!profile || profile.id !== profileId) throw new Error("Profile not found");
+          const gemini = requireGemini();
+
+          rpc.send.pipelineUpdate({ type: "queries:generating", payload: null });
+          console.log("[queries] Generating search queries from profile");
+          const t = performance.now();
+          const queries = await generateSearchQueries(getDb(), profile, gemini);
+          console.log(`[queries] Generated ${queries.length} queries (${((performance.now() - t) / 1000).toFixed(1)}s)`);
+          rpc.send.pipelineUpdate({ type: "queries:generated", payload: { count: queries.length } });
+
+          const maxAgeSecs = (linkedInSelectors.maxAgeDays ?? 7) * 86400;
+          const hasRemote = queries.some((q) => q.remote);
+          const avgKeywords = Math.ceil(queries.reduce((sum, q) => sum + q.keywords.length, 0) / queries.length);
+          const searchesPerQuery = avgKeywords * (hasRemote ? 2 : 1);
+          const pagesPerQuery = Math.max(1, Math.floor(200 / (queries.length * searchesPerQuery * 10)));
+          lastPagesPerQuery = pagesPerQuery;
+          lastSearchTime = Date.now();
+          console.log(`[queries] pagesPerQuery=${pagesPerQuery} (${queries.length} queries, ~${avgKeywords} keywords, remote=${hasRemote})`);
+
+          const adapter = new LinkedInAdapter({
+            selectors: linkedInSelectors,
+            maxAgeSecs,
+            pagesPerQuery,
+          });
+
+          const MAX_JOBS = 200;
+          let totalDiscovered = 0;
+          for (let i = 0; i < queries.length; i++) {
+            if (totalDiscovered >= MAX_JOBS) {
+              console.log(`[queries] Reached ${MAX_JOBS} job cap, skipping remaining queries`);
+              break;
+            }
+            const query = queries[i]!;
+            rpc.send.pipelineUpdate({ type: "job:searching", payload: { query } });
+            console.log(`[queries] Query ${i + 1}/${queries.length}: ${query.keywords.join(", ")}`);
+            await adapter.search(query, (batch) => {
+              const result = storeJobs(getDb(), batch);
+              totalDiscovered += result.inserted;
+              rpc.send.pipelineUpdate({ type: "job:search:complete", payload: { total: result.inserted } });
+              return result;
+            });
+          }
+
+          console.log(`[queries] Complete: ${totalDiscovered} new jobs (${((performance.now() - t) / 1000).toFixed(1)}s)`);
+          rpc.send.pipelineUpdate({
+            type: "queries:search:complete",
+            payload: { queriesRun: queries.length, jobsDiscovered: totalDiscovered },
+          });
+        } catch (err: any) {
+          console.error("[queries] Failed:", err.message);
+          rpc.send.pipelineUpdate({
+            type: "queries:error",
+            payload: { message: err.message ?? "Query generation failed" },
+          });
+        }
+      },
+      fetchMoreJobs: async ({ profileId }) => {
+        try {
+          const profile = getProfile(getDb());
+          if (!profile || profile.id !== profileId) throw new Error("Profile not found");
+
+          const cached = getDb().query(
+            "SELECT queries_json FROM generated_queries WHERE profile_id = ?"
+          ).get(profile.id) as { queries_json: string } | null;
+
+          if (!cached) {
+            rpc.send.pipelineUpdate({ type: "fetchmore:error", payload: { message: "No previous queries. Run Find Jobs first." } });
+            return;
+          }
+
+          const queries: SearchQuery[] = JSON.parse(cached.queries_json);
+          const hoursSinceSearch = (Date.now() - lastSearchTime) / 3_600_000;
+          if (hoursSinceSearch > 24 || lastPagesPerQuery === 0) {
+            lastPagesPerQuery = 1;
+            lastSearchTime = Date.now();
+            console.log("[fetchmore] 24h+ since last search, resetting to page 1");
+          } else {
+            lastPagesPerQuery += 1;
+          }
+          console.log(`[fetchmore] Fetching page ${lastPagesPerQuery} across ${queries.length} queries`);
+
+          rpc.send.pipelineUpdate({ type: "fetchmore:searching", payload: null });
+
+          const maxAgeSecs = (linkedInSelectors.maxAgeDays ?? 7) * 86400;
+          const adapter = new LinkedInAdapter({
+            selectors: linkedInSelectors,
+            maxAgeSecs,
+            pagesPerQuery: lastPagesPerQuery,
+            startPage: lastPagesPerQuery - 1,
+          });
+
+          let totalDiscovered = 0;
+          for (const query of queries) {
+            await adapter.search(query, (batch) => {
+              const result = storeJobs(getDb(), batch);
+              totalDiscovered += result.inserted;
+              rpc.send.pipelineUpdate({ type: "job:search:complete", payload: { total: result.inserted } });
+              return result;
+            });
+          }
+
+          console.log(`[fetchmore] Complete: ${totalDiscovered} new jobs`);
+          rpc.send.pipelineUpdate({ type: "fetchmore:complete", payload: { jobsDiscovered: totalDiscovered } });
+        } catch (err: any) {
+          console.error("[fetchmore] Failed:", err.message);
+          rpc.send.pipelineUpdate({ type: "fetchmore:error", payload: { message: err.message ?? "Fetch more failed" } });
+        }
+      },
       pickAndProcessResume: async () => {
         try {
           const filePaths = await Utils.openFileDialog({
@@ -225,12 +332,8 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
 
           rpc.send.pipelineUpdate({ type: "resume:parsing", payload: null });
           t = performance.now();
-          const model = (
-            getDb().query("SELECT value FROM settings WHERE key = 'selected_model'").get() as { value: string }
-          ).value;
-          if (!model) throw new Error("No Ollama model selected. Go to setup and choose a model.");
-          console.log(`[resume] Using model: "${model}"`);
-          const parsed = await parseResume(resumeText, ollama, model);
+          const gemini = requireGemini();
+          const parsed = await parseResume(resumeText, gemini);
           console.log(`[resume] LLM parse done (${((performance.now() - t) / 1000).toFixed(1)}s)`);
 
           rpc.send.pipelineUpdate({ type: "resume:storing", payload: null });

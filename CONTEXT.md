@@ -42,7 +42,7 @@ The act of retrieving a job's full description from its source page. Required be
 The sequence: detail fetch → LLM analysis → Fit Score generation. LLM scoring is compute-bound and runs sequentially (concurrency 1) due to local model constraints.
 
 ### JSON Repair
-The recovery strategy when LLM output is malformed: Ollama JSON mode constrains output, Zod validates structure, failed attempts retry up to 3 times with error context injected into the prompt.
+The recovery strategy when LLM output is malformed: Gemini structured output mode constrains output via responseJsonSchema, Zod validates structure, failed attempts retry up to 3 times with error context injected into the prompt.
 
 ### Match
 A structured object representing a skill/experience alignment between Profile and Job: `{skill, type: exact|inferred|partial, context}`. Used in scoring output, UI display, and resume generation.
@@ -66,7 +66,7 @@ Five LLM-generated questions tailored to the parsed resume, presented after prof
 A hard constraint from profile enrichment (e.g., "no onsite", "no startups", "minimum $X salary"). When a job violates a dealbreaker, it should be flagged or filtered regardless of Fit Score.
 
 ### Setup Wizard
-The first-run experience that checks Ollama status, guides installation if missing, offers to pull a recommended model, and proceeds to resume upload. Shown once on first launch or when Ollama becomes unavailable.
+The first-run experience that prompts for a Gemini API key, validates it, and stores it encrypted in SQLite. Shown on first launch or when no valid API key is configured.
 
 ### Selector Config
 JSON-configurable CSS selectors used by the LinkedIn Adapter to parse HTML. Not hardcoded — stored as configuration so selector fixes can ship via app updates without code changes. Parsed output is validated; missing critical fields result in `parse_failed` status.

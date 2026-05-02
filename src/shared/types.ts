@@ -21,16 +21,12 @@ export const ResumeParseResultSchema = z.object({
     remote: z.boolean().default(false),
     min_salary: z.number().nullable().default(null),
     company_sizes: z.array(z.string()).default([]),
-  }).default(() => ({ locations: [], remote: false, min_salary: null, company_sizes: [] })),
+    country: z.string().nullable().default(null),
+  }).default(() => ({ locations: [], remote: false, min_salary: null, company_sizes: [], country: null })),
 });
 
 export type ResumeParseResult = z.infer<typeof ResumeParseResultSchema>;
 
-export type OllamaModelInfo = {
-  name: string;
-  size: number;
-  parameterSize: string;
-};
 
 export type UploadResumeResult = {
   profile: Profile;
@@ -44,7 +40,6 @@ export type PipelineEvent =
   | { type: "resume:complete"; payload: null }
   | { type: "resume:error"; payload: { message: string } }
   | { type: "resume:cancelled"; payload: null }
-  | { type: "pull:progress"; payload: { status: string; completed?: number; total?: number } }
   | { type: "enrichment:generating"; payload: null }
   | { type: "enrichment:questions"; payload: { questions: EnrichmentQuestion[] } }
   | { type: "enrichment:extracting"; payload: null }
@@ -53,7 +48,14 @@ export type PipelineEvent =
   | { type: "job:searching"; payload: { query: SearchQuery } }
   | { type: "job:discovered"; payload: { count: number } }
   | { type: "job:search:complete"; payload: { total: number } }
-  | { type: "job:search:error"; payload: { message: string } };
+  | { type: "job:search:error"; payload: { message: string } }
+  | { type: "queries:generating"; payload: null }
+  | { type: "queries:generated"; payload: { count: number } }
+  | { type: "queries:search:complete"; payload: { queriesRun: number; jobsDiscovered: number } }
+  | { type: "queries:error"; payload: { message: string } }
+  | { type: "fetchmore:searching"; payload: null }
+  | { type: "fetchmore:complete"; payload: { jobsDiscovered: number } }
+  | { type: "fetchmore:error"; payload: { message: string } };
 
 type UpdateProfileParams = {
   fields: Partial<Pick<Profile, "roles" | "skills_primary" | "skills_secondary" | "experience_years" | "seniority" | "domains" | "preferences">>;
@@ -63,17 +65,14 @@ type UpdateProfileParams = {
 export type AppRPCSchema = {
   bun: {
     requests: {
-      getHealth: { params: undefined; response: { ollama: boolean; db: boolean } };
+      getHealth: { params: undefined; response: { gemini: boolean; db: boolean } };
       getProfile: { params: undefined; response: Profile | null };
       getResumeText: { params: undefined; response: string | null };
       resetProfile: { params: undefined; response: void };
       updateProfile: { params: UpdateProfileParams; response: Profile };
       runMigrations: { params: undefined; response: { applied: number } };
-      listOllamaModels: { params: undefined; response: OllamaModelInfo[] };
-      checkOllama: { params: undefined; response: boolean };
-      pullOllamaModel: { params: { name: string }; response: { success: boolean; error?: string } };
-      setSelectedModel: { params: { model: string }; response: void };
-      getSelectedModel: { params: undefined; response: string };
+      hasApiKey: { params: undefined; response: boolean };
+      setApiKey: { params: { key: string }; response: { valid: boolean } };
       getEnrichmentAnswers: { params: { profileId: number }; response: EnrichmentAnswer[] };
       getJobFeed: { params: JobFeedParams; response: JobFeedResult };
       searchCities: { params: { query: string }; response: CityResult[] };
@@ -84,6 +83,8 @@ export type AppRPCSchema = {
       generateEnrichmentQuestions: { profileId: number };
       processEnrichmentAnswers: { profileId: number; answers: EnrichmentAnswer[] };
       searchJobs: SearchQuery;
+      generateAndSearch: { profileId: number };
+      fetchMoreJobs: { profileId: number };
     };
   };
   webview: {
@@ -116,6 +117,7 @@ export type ProfilePreferences = {
   remote: boolean;
   min_salary: number | null;
   company_sizes: string[];
+  country: string | null;
 };
 
 export type EnrichmentCategory = "career_intent" | "problem_solving" | "technical_depth";
@@ -212,6 +214,7 @@ export type SearchQuery = {
   geoId?: string;
   experienceLevel?: string;
   remote?: boolean;
+  remoteLocation?: string;
   jobTypes?: string[];
 };
 
@@ -232,3 +235,15 @@ export type JobFeedResult = {
   hasMore: boolean;
   failedCount: number;
 };
+
+export const GeneratedQuerySchema = z.object({
+  keywords: z.array(z.string()).min(1).max(5),
+  location: z.string().optional(),
+  experienceLevel: z.string().optional(),
+  strategy: z.enum(["precise", "broad", "exploratory"]),
+});
+
+export const GenerateQueriesResultSchema = z.object({
+  queries: z.array(GeneratedQuerySchema).min(3).max(5),
+});
+

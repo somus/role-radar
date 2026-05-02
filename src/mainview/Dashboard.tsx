@@ -125,9 +125,9 @@ export function Dashboard({ profile, onEditProfile, onEnrichment, onReset }: Pro
           </CardContent>
         </Card>
 
-        <JobSearch onSearchComplete={handleSearchComplete} />
+        <JobSearch profileId={profile.id} onSearchComplete={handleSearchComplete} />
 
-        <JobFeed refreshKey={feedRefresh} hasSearched={hasSearched} />
+        <JobFeed profileId={profile.id} refreshKey={feedRefresh} hasSearched={hasSearched} />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={onEnrichment}>

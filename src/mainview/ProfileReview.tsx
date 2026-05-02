@@ -38,6 +38,7 @@ const profileFormSchema = z.object({
   domains: z.array(z.string()),
   locations: z.array(z.string()),
   remote: z.boolean(),
+  country: z.string().nullable(),
   min_salary: z.number().nonnegative().nullable(),
   company_sizes: z.array(z.string()),
   resumeText: z.string().min(1, "Resume text cannot be empty"),
@@ -56,9 +57,10 @@ type Props = {
   profile: Profile;
   resumeText: string;
   onSave: (profile: Profile) => void;
+  onCancel?: () => void;
 };
 
-export function ProfileReview({ profile, resumeText, onSave }: Props) {
+export function ProfileReview({ profile, resumeText, onSave, onCancel }: Props) {
   const prefs = profile.preferences ?? {};
 
   const form = useForm<ProfileFormValues>({
@@ -72,6 +74,7 @@ export function ProfileReview({ profile, resumeText, onSave }: Props) {
       domains: profile.domains ?? [],
       locations: prefs.locations ?? [],
       remote: prefs.remote ?? false,
+      country: prefs.country ?? null,
       min_salary: prefs.min_salary ?? null,
       company_sizes: prefs.company_sizes ?? [],
       resumeText,
@@ -95,6 +98,7 @@ export function ProfileReview({ profile, resumeText, onSave }: Props) {
           preferences: {
             locations: data.locations,
             remote: data.remote,
+            country: data.country,
             min_salary: data.min_salary,
             company_sizes: data.company_sizes,
           },
@@ -195,6 +199,22 @@ export function ProfileReview({ profile, resumeText, onSave }: Props) {
               />
 
               <Controller
+                name="country"
+                control={form.control}
+                render={({ field }) => (
+                  <Field>
+                    <FieldLabel htmlFor="country">Country (for remote job search)</FieldLabel>
+                    <Input
+                      id="country"
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value || null)}
+                      placeholder="e.g., India, United States"
+                    />
+                  </Field>
+                )}
+              />
+
+              <Controller
                 name="min_salary"
                 control={form.control}
                 render={({ field, fieldState }) => (
@@ -253,9 +273,16 @@ export function ProfileReview({ profile, resumeText, onSave }: Props) {
             <p className="text-sm text-destructive">{submitError}</p>
           )}
 
-          <Button size="lg" className="w-full" type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? "Saving..." : "Save Profile"}
-          </Button>
+          <div className="flex gap-3">
+            <Button size="lg" className="flex-1" type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? "Saving..." : "Save Profile"}
+            </Button>
+            {onCancel && (
+              <Button size="lg" variant="ghost" type="button" onClick={onCancel} disabled={form.formState.isSubmitting}>
+                Cancel
+              </Button>
+            )}
+          </div>
         </form>
       </div>
     </div>

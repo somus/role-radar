@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { OllamaClient } from "./ollama-client";
+import type { GeminiClient } from "./gemini-client";
 import type { Profile, EnrichmentQuestion, EnrichmentAnswer } from "../shared/types";
 import { EnrichmentQuestionsSchema, EnrichmentExtractionSchema } from "../shared/types";
 import { getProfile } from "./profile-store";
@@ -25,8 +25,7 @@ JSON: { "questions": [{ "question": "...", "category": "...", "guided_prompt": "
 export async function generateQuestions(
   db: Database,
   profile: Profile,
-  ollama: OllamaClient,
-  model: string
+  gemini: GeminiClient
 ): Promise<EnrichmentQuestion[]> {
   const cached = db.query(
     "SELECT questions_json FROM enrichment_questions WHERE profile_id = ? AND profile_updated_at = ?"
@@ -43,7 +42,7 @@ export async function generateQuestions(
     .replace("{seniority}", profile.seniority)
     .replace("{domains}", profile.domains.join(", "));
 
-  const result = await ollama.infer(prompt, EnrichmentQuestionsSchema, model);
+  const result = await gemini.infer(prompt, EnrichmentQuestionsSchema);
 
   db.query(
     `INSERT INTO enrichment_questions (profile_id, profile_updated_at, questions_json)
@@ -72,8 +71,7 @@ export async function submitEnrichmentAnswers(
   db: Database,
   profileId: number,
   answers: EnrichmentAnswer[],
-  ollama: OllamaClient,
-  model: string
+  gemini: GeminiClient
 ): Promise<Profile> {
   if (answers.length === 0) return getProfile(db)!;
 
@@ -90,7 +88,7 @@ export async function submitEnrichmentAnswers(
     .join("\n\n");
   const prompt = EXTRACTION_PROMPT.replace("{qa_pairs}", qaPairs);
 
-  const extracted = await ollama.infer(prompt, EnrichmentExtractionSchema, model);
+  const extracted = await gemini.infer(prompt, EnrichmentExtractionSchema);
 
   db.query(
     `UPDATE profiles SET

@@ -104,7 +104,7 @@ describe("LinkedInAdapter", () => {
         .mockResolvedValueOnce(new Response(fixtureHtml, { status: 200 }))
         .mockResolvedValueOnce(new Response(fixtureHtml, { status: 200 }));
 
-      const jobs = await adapter.search({ keywords: ["backend"], remote: true });
+      const jobs = await adapter.search({ keywords: ["backend"], remote: true, location: "Bangalore, India" });
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
       const secondUrl = (mockFetch.mock.calls[1]![0] as string);
@@ -119,7 +119,7 @@ describe("LinkedInAdapter", () => {
         .mockResolvedValueOnce(new Response(fixtureHtml, { status: 200 }))
         .mockResolvedValueOnce(new Response(fixtureHtml, { status: 200 }));
 
-      const jobs = await adapter.search({ keywords: ["backend", "frontend"], remote: true });
+      const jobs = await adapter.search({ keywords: ["backend", "frontend"], remote: true, location: "Bangalore, India" });
 
       expect(mockFetch).toHaveBeenCalledTimes(4);
       expect(jobs).toHaveLength(12);
@@ -130,6 +130,17 @@ describe("LinkedInAdapter", () => {
       expect(urls[1]).toContain("f_WT=2");
       expect(urls[2]).toContain("keywords=frontend");
       expect(urls[3]).toContain("f_WT=2");
+    });
+
+    test("skips remote search when location is not set", async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response(fixtureHtml, { status: 200 }));
+
+      const jobs = await adapter.search({ keywords: ["backend"], remote: true });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const url = (mockFetch.mock.calls[0]![0] as string);
+      expect(url).not.toContain("f_WT");
     });
 
     test("fires sequential queries for multiple keywords", async () => {

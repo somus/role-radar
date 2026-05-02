@@ -49,6 +49,7 @@ type AdapterOptions = {
   delayMs?: number;
   maxAgeSecs?: number;
   pagesPerQuery?: number;
+  startPage?: number;
 };
 
 export class LinkedInAdapter {
@@ -57,6 +58,7 @@ export class LinkedInAdapter {
   private delayMs: number;
   private maxAgeSecs: number;
   private pagesPerQuery: number;
+  private startPage: number;
 
   constructor(opts: AdapterOptions) {
     this.fetchFn = opts.fetchFn ?? fetch;
@@ -64,6 +66,7 @@ export class LinkedInAdapter {
     this.delayMs = opts.delayMs ?? 2500;
     this.maxAgeSecs = opts.maxAgeSecs ?? 604800;
     this.pagesPerQuery = opts.pagesPerQuery ?? 3;
+    this.startPage = opts.startPage ?? 0;
   }
 
   buildSearchUrl(keywords: string, query: SearchQuery, extraParams?: Record<string, string>): string {
@@ -74,6 +77,7 @@ export class LinkedInAdapter {
     if (query.experienceLevel) params.set("f_E", query.experienceLevel);
     if (query.jobTypes && query.jobTypes.length > 0) params.set("f_JT", query.jobTypes.join(","));
     if (this.maxAgeSecs > 0) params.set("f_TPR", `r${this.maxAgeSecs}`);
+    params.set("sortBy", "DD");
     if (extraParams) {
       for (const [k, v] of Object.entries(extraParams)) {
         params.set(k, v);
@@ -82,18 +86,24 @@ export class LinkedInAdapter {
     return `${BASE_URL}/jobs-guest/jobs/api/seeMoreJobPostings/search?${params}`;
   }
 
-  async search(query: SearchQuery): Promise<ParsedJob[]> {
+  async search(
+    query: SearchQuery,
+    onProgress?: (jobs: ParsedJob[]) => { inserted: number; skipped: number }
+  ): Promise<ParsedJob[]> {
     const allJobs: ParsedJob[] = [];
 
     for (let i = 0; i < query.keywords.length; i++) {
       if (i > 0 && this.delayMs > 0) await sleep(this.delayMs);
       const kw = query.keywords[i]!;
-      const jobs = await this.fetchAllPages(kw, query);
+      const jobs = await this.fetchAllPages(kw, query, undefined, onProgress);
       allJobs.push(...jobs);
 
-      if (query.remote) {
+      if (query.remote && (query.remoteLocation || query.location)) {
         if (this.delayMs > 0) await sleep(this.delayMs);
-        const remoteJobs = await this.fetchAllPages(kw, query, { f_WT: "2" });
+        const remoteQuery = query.remoteLocation
+          ? { ...query, location: query.remoteLocation, geoId: undefined }
+          : query;
+        const remoteJobs = await this.fetchAllPages(kw, remoteQuery, { f_WT: "2" }, onProgress);
         allJobs.push(...remoteJobs);
       }
     }
@@ -104,19 +114,27 @@ export class LinkedInAdapter {
   private async fetchAllPages(
     keywords: string,
     query: SearchQuery,
-    extraParams?: Record<string, string>
+    extraParams?: Record<string, string>,
+    onProgress?: (jobs: ParsedJob[]) => { inserted: number; skipped: number }
   ): Promise<ParsedJob[]> {
     const allJobs: ParsedJob[] = [];
     const label = extraParams?.f_WT ? `${keywords} (remote)` : keywords;
 
-    for (let page = 0; page < this.pagesPerQuery; page++) {
-      if (page > 0 && this.delayMs > 0) await sleep(this.delayMs);
+    for (let page = this.startPage; page < this.pagesPerQuery; page++) {
+      if (page > this.startPage && this.delayMs > 0) await sleep(this.delayMs);
       const start = page * PAGE_SIZE;
       const url = this.buildSearchUrl(keywords, query, { ...extraParams, start: String(start) });
       const jobs = await this.fetchAndParse(url);
       console.log(`[linkedin] "${label}" page ${page + 1} → ${jobs.length} jobs`);
       allJobs.push(...jobs);
       if (jobs.length < PAGE_SIZE) break;
+      if (onProgress) {
+        const result = onProgress(jobs);
+        if (result.skipped >= jobs.length * 0.8) {
+          console.log(`[linkedin] "${label}" page ${page + 1}: ${result.skipped}/${jobs.length} dupes, stopping pagination`);
+          break;
+        }
+      }
     }
 
     return allJobs;

@@ -15,6 +15,8 @@ type Props = {
   onSkip: () => void;
 };
 
+const pendingGenerations = new Set<number>();
+
 const CATEGORY_LABELS: Record<string, string> = {
   career_intent: "Career Intent",
   problem_solving: "Problem Solving",
@@ -30,8 +32,6 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
   const [error, setError] = useState<string | null>(null);
   const [errorPhase, setErrorPhase] = useState<"generate" | "submit" | null>(null);
   const questionsRef = useRef<EnrichmentQuestion[]>([]);
-  const generationSent = useRef(false);
-
   const form = useForm<FormValues>({ defaultValues: {} });
   const watchedValues = form.watch();
   const hasAnswers = Object.values(watchedValues).some((v) => v.trim().length > 0);
@@ -61,7 +61,9 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
           form.reset(prefilled);
         }).catch((e) => { console.error("[enrichment] Failed to load saved answers:", e); });
         setLoading(false);
+        pendingGenerations.delete(profile.id);
       } else if (type === "enrichment:complete") {
+        pendingGenerations.delete(profile.id);
         onComplete(payload.profile);
       } else if (type === "enrichment:error") {
         setError(payload.message);
@@ -74,16 +76,17 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
     window.addEventListener("pipeline-update", handlePipelineEvent);
 
     async function init() {
-      if (generationSent.current) return;
+      if (pendingGenerations.has(profile.id)) return;
+      pendingGenerations.add(profile.id);
       try {
         if (!forceRegenerate) {
           const existing = await electrobun.rpc.request.getEnrichmentAnswers({ profileId: profile.id });
           if (existing.length > 0 && !cancelled) {
+            pendingGenerations.delete(profile.id);
             onSkip();
             return;
           }
         }
-        generationSent.current = true;
         electrobun.rpc.send.generateEnrichmentQuestions({ profileId: profile.id });
       } catch (e: any) {
         if (!cancelled) {
@@ -104,8 +107,10 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
   function handleRetry() {
     setError(null);
     setErrorPhase(null);
+    pendingGenerations.delete(profile.id);
     if (questions.length === 0) {
       setLoading(true);
+      pendingGenerations.add(profile.id);
       electrobun.rpc.send.generateEnrichmentQuestions({ profileId: profile.id });
     } else {
       form.handleSubmit(onSubmit)();

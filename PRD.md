@@ -45,10 +45,10 @@ A local-first application that ingests a user's resume, builds a rich profession
 22. As a job seeker, I want a "New" badge on jobs discovered since my last visit, so that I can quickly spot fresh opportunities.
 23. As a job seeker, I want to re-upload my resume or edit my profile at any time, so that the system stays current as my experience or goals change.
 24. As a job seeker, I want profile changes to trigger re-scoring of all existing jobs, so that rankings reflect my updated profile.
-25. As a job seeker, I want to see a clear error when Ollama isn't running, with instructions to install or start it, so that I can fix the issue without debugging.
+25. As a job seeker, I want to see a clear error when the Gemini API key is missing or invalid, with instructions to get one, so that I can fix the issue without debugging.
 26. As a job seeker, I want failed jobs to appear in the feed with a retry button, so that transient failures don't silently drop results.
 27. As a job seeker, I want a progress indicator showing "42/50 scored, 8 failed", so that I always know the pipeline's state.
-28. As a job seeker, I want to choose which Ollama model to use from my installed models, so that I can balance speed vs quality for my hardware.
+28. ~~(Removed — model is now fixed to Gemini 2.5 Flash Lite)~~
 29. As a job seeker, I want dealbreakers (e.g., "no onsite", "no startups") to filter or flag jobs regardless of Fit Score, so that hard constraints are always respected.
 30. As a job seeker, I want all my data to stay on my machine, so that my resume, profile, and job search activity remain private.
 
@@ -65,13 +65,13 @@ A local-first application that ingests a user's resume, builds a rich profession
 - **Migrations:** Sequential numbered migration files. `_migrations` table tracks applied. Run pending migrations on app startup. Never modify existing migrations.
 - **System tray:** App minimizes to tray on window close (not quit). Background daily refresh runs while minimized. Tray icon shows notification badge when new jobs found. Explicit "Quit" to exit.
 - **Auto-update:** Electrobun BSDIFF patching. Check for updates on launch. Download tiny patches. Critical for shipping LinkedIn selector fixes fast.
-- **First-run:** Guided setup wizard — check Ollama status → install instructions if missing → offer to pull recommended model if none installed → proceed to resume upload.
+- **First-run:** Guided setup wizard — prompt for Gemini API key → validate → store encrypted → proceed to resume upload.
 - **Offline:** Graceful degradation. Cached jobs browsable, LLM scoring works on jobs with details already fetched, resume generation works fully offline. Discovery/fetch show "No internet" inline — no modal blocking.
 - **File storage:** Original uploaded resume PDFs stored in app data directory. Generated resume PDFs save via Save As dialog to user-chosen location. Logs in app data directory (Pino, rotating, capped).
 
 ### Modules
 
-1. **Ollama Client** — Wraps all LLM interaction. Auto-detects installed models via `/api/tags`. Health check on startup. Inference with `format: 'json'` + Zod validation + 3 retries with error feedback in prompt. Single interface: `infer(prompt, schema) → T`.
+1. **Gemini Client** — Wraps all LLM interaction via Gemini 2.5 Flash Lite REST API. Health check on startup. Inference with `responseJsonSchema` structured output + Zod validation + 3 retries with error feedback in prompt. Single interface: `infer(prompt, schema) → T`. API key stored encrypted in SQLite.
 2. **Resume Parser** — `@libpdf/core` for PDF text extraction. LLM parses text into structured Profile. Zod validates output. Interface: `parse(pdfBuffer) → Profile`.
 3. **Profile Enrichment** — LLM generates 5 questions from parsed profile covering career intent + dealbreakers, problem-solving stories from past roles, and technical depth. Free-text answers with guided prompts. LLM extracts structured enrichment data. Re-answerable anytime from profile page. Interface: `generateQuestions(profile) → Question[]`, `enrichProfile(profile, answers) → EnrichedProfile`.
 4. **Profile Store** — CRUD for profiles in SQLite. On update (via PDF re-upload, form edit, or re-enrichment), triggers full pipeline re-run: regenerate queries → new search → re-score all jobs.
@@ -175,7 +175,7 @@ Additional flags (not states): `resume_generated: boolean`, `is_new: boolean`.
 | DB | bun:sqlite |
 | PDF parse | @libpdf/core |
 | PDF gen | @react-pdf/renderer |
-| LLM | Ollama (user-selected model via auto-detect) |
+| LLM | Gemini 2.5 Flash Lite (cloud API, encrypted key) |
 | Frontend | React + Vite + Tailwind + shadcn/ui (in webview) |
 | Validation | Zod |
 | Logging | Pino (rotating file, capped, in app data dir) |
@@ -188,16 +188,16 @@ Additional flags (not states): `resume_generated: boolean`, `is_new: boolean`.
 
 ### What makes a good test
 
-Tests should verify external behavior through module interfaces, not implementation details. A test should break only when the module's contract changes — not when internals are refactored. Mock external dependencies (Ollama API, LinkedIn HTTP), never mock internal functions.
+Tests should verify external behavior through module interfaces, not implementation details. A test should break only when the module's contract changes — not when internals are refactored. Mock external dependencies (Gemini API, LinkedIn HTTP), never mock internal functions.
 
 ### Modules under test
 
-1. **Ollama Client** — Health check detection, retry loop on malformed JSON, Zod validation failure handling, model list parsing. Mock HTTP responses from Ollama API.
+1. **Gemini Client** — Health check detection, retry loop on malformed JSON, Zod validation failure handling. Mock HTTP responses from Gemini API.
 2. **Resume Parser** — PDF text extraction → structured Profile. Test with sample PDF buffers. Verify Zod schema compliance. Test malformed PDF handling.
 3. **Heuristic Scorer** — Pure function, no mocks needed. Test title matching (exact, partial, unrelated), location matching, recency weighting. Verify ordering is stable.
-4. **LLM Scorer** — Mock Ollama Client. Verify 4-dimension output structure. Test overqualified flag detection. Test structured match/gap generation. Verify calibration rubric boundaries.
+4. **LLM Scorer** — Mock Gemini Client. Verify 4-dimension output structure. Test overqualified flag detection. Test structured match/gap generation. Verify calibration rubric boundaries.
 5. **Score Weights** — Pure function. Test default weights, custom weights, edge cases (all zeros, single dimension). Verify composite matches manual calculation.
-6. **Query Generator** — Mock Ollama Client. Verify output maps to valid LinkedIn API params. Test with different profile shapes (sparse, complete).
+6. **Query Generator** — Mock Gemini Client. Verify output maps to valid LinkedIn API params. Test with different profile shapes (sparse, complete).
 7. **LinkedIn Adapter** — Mock HTTP responses with saved HTML snapshots. Test search result parsing, detail page parsing. Test rate limit handling (429 response → backoff). Test HTML structure changes (graceful degradation).
 8. **Job Pipeline** — Integration tests with real bunqueue (embedded) + SQLite. Test lifecycle transitions, dedup behavior, failure handling, re-scoring on profile update.
 
@@ -210,7 +210,7 @@ Tests should verify external behavior through module interfaces, not implementat
 - **Adaptive learning** from user feedback on scores.
 - **Analytics** dashboard or usage tracking.
 - **Multi-user support**, authentication, or tenant isolation.
-- **MLX runtime** (Ollama only for MVP).
+- **Local LLM runtime** (using cloud Gemini API for MVP).
 - **Multiple resume templates** (one template for MVP).
 - **Job application tracking** beyond the `resume_generated` flag.
 - **Browser extension** or LinkedIn integration.
@@ -222,7 +222,7 @@ Tests should verify external behavior through module interfaces, not implementat
 
 - **Domain language** is defined in `CONTEXT.md` at the project root. All modules should use these terms consistently.
 - **LinkedIn scraping will break.** The adapter pattern exists specifically to make source-swapping cheap. Build resilient, not invisible.
-- **LLM model choice is deliberately deferred to the user.** The system auto-detects installed Ollama models and presents a dropdown. No hardcoded model dependency.
+- **LLM model is fixed to Gemini 2.5 Flash Lite.** Fast, cheap, good structured output. Model selection may be added later if needed.
 - **Profile enrichment questions are the key differentiator.** Resumes show what you've done; the questions capture what you want next and the stories that make tailored resumes compelling. This data feeds both scoring and resume generation.
 - **Dealbreakers are hard filters.** A job violating a dealbreaker should be flagged or filtered regardless of Fit Score. This is distinct from low-scoring — a 90% fit job in a wrong location with "no onsite" as a dealbreaker should still be flagged.
 - **The heuristic scorer is a cost-reduction mechanism, not a quality signal.** It exists solely to reduce the number of expensive LLM scoring calls. False negatives here mean good jobs never get scored — keep the filter loose (err toward including, not excluding).

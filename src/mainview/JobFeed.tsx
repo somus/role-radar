@@ -1,37 +1,42 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { electrobun } from "./electrobun";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Job, JobFeedResult } from "../shared/types";
 
-const PAGE_SIZE = 25;
+const FIRST_PAGE_SIZE = 200;
+const LOAD_MORE_SIZE = 50;
 
 type Props = {
+  profileId: number;
   refreshKey: number;
   hasSearched?: boolean;
 };
 
-export function JobFeed({ refreshKey, hasSearched }: Props) {
+export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [offset, setOffset] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
+  const [fetchingMore, setFetchingMore] = useState(false);
+  const [fetchMoreResult, setFetchMoreResult] = useState<number | null>(null);
 
   const loadPage = useCallback(async (pageOffset: number, append: boolean) => {
     setLoading(true);
+    const limit = pageOffset === 0 ? FIRST_PAGE_SIZE : LOAD_MORE_SIZE;
     try {
       const result: JobFeedResult = await electrobun.rpc.request.getJobFeed({
-        limit: PAGE_SIZE,
+        limit,
         offset: pageOffset,
       });
       setJobs(prev => append ? [...prev, ...result.jobs] : result.jobs);
       setTotal(result.total);
       setHasMore(result.hasMore);
       setFailedCount(result.failedCount);
-      setOffset(pageOffset + PAGE_SIZE);
+      setOffset(pageOffset + limit);
     } finally {
       setLoading(false);
     }
@@ -40,6 +45,33 @@ export function JobFeed({ refreshKey, hasSearched }: Props) {
   useEffect(() => {
     loadPage(0, false);
   }, [refreshKey, loadPage]);
+
+  const reloadDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    return () => clearTimeout(reloadDebounce.current);
+  }, []);
+
+  useEffect(() => {
+    function handlePipeline(e: Event) {
+      const { type, payload } = (e as CustomEvent).detail;
+      if (type === "job:search:complete") {
+        clearTimeout(reloadDebounce.current);
+        reloadDebounce.current = setTimeout(() => loadPage(0, false), 500);
+      } else if (type === "fetchmore:searching") {
+        setFetchingMore(true);
+        setFetchMoreResult(null);
+      } else if (type === "fetchmore:complete") {
+        setFetchingMore(false);
+        setFetchMoreResult((payload as { jobsDiscovered: number }).jobsDiscovered);
+        loadPage(0, false);
+      } else if (type === "fetchmore:error") {
+        setFetchingMore(false);
+      }
+    }
+    window.addEventListener("pipeline-update", handlePipeline);
+    return () => window.removeEventListener("pipeline-update", handlePipeline);
+  }, [loadPage]);
 
   if (!loading && jobs.length === 0) {
     return (
@@ -94,8 +126,30 @@ export function JobFeed({ refreshKey, hasSearched }: Props) {
           disabled={loading}
           onClick={() => loadPage(offset, true)}
         >
-          {loading ? "Loading..." : "Load more"}
+          {loading ? "Loading..." : "Show more"}
         </Button>
+      )}
+
+      {total > 0 && !hasMore && (
+        <div className="space-y-1.5 pt-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            disabled={fetchingMore}
+            onClick={() => {
+              setFetchMoreResult(null);
+              electrobun.rpc.send.fetchMoreJobs({ profileId });
+            }}
+          >
+            {fetchingMore ? "Fetching more jobs..." : "Fetch More Jobs from LinkedIn"}
+          </Button>
+          {fetchMoreResult !== null && (
+            <p className="text-xs text-muted-foreground text-center">
+              {fetchMoreResult > 0 ? `${fetchMoreResult} new jobs found` : "No new jobs found"}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

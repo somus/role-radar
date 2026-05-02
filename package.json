@@ -4,9 +4,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "vite build && electrobun dev",
-    "build:dev": "bun install && vite build && electrobun build",
-    "dev": "vite build && electrobun dev --watch",
+    "postbuild:fonts": "mkdir -p dist/assets/files && cp node_modules/@fontsource-variable/jetbrains-mono/files/*-normal.woff2 dist/assets/files/",
+    "start": "vite build && bun run postbuild:fonts && electrobun dev",
+    "build:dev": "bun install && vite build && bun run postbuild:fonts && electrobun build",
+    "dev": "vite build && bun run postbuild:fonts && electrobun dev --watch",
     "dev:hmr": "vite & electrobun dev --watch",
     "test": "bun test"
   },

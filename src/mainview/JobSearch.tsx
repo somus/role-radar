@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v4";
@@ -7,6 +7,8 @@ import { TagInput, type Tag } from "emblor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -60,11 +62,14 @@ function fromTags(tags: Tag[]): string[] {
 }
 
 type Props = {
+  profileId: number;
   onSearchComplete: () => void;
 };
 
-export function JobSearch({ onSearchComplete }: Props) {
+export function JobSearch({ profileId, onSearchComplete }: Props) {
   const [searching, setSearching] = useState(false);
+  const [autoSearching, setAutoSearching] = useState(false);
+  const [autoStatus, setAutoStatus] = useState<string | null>(null);
   const [result, setResult] = useState<{ total: number } | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [activeKeywordIdx, setActiveKeywordIdx] = useState<number | null>(null);
@@ -92,10 +97,28 @@ export function JobSearch({ onSearchComplete }: Props) {
         setSearchError(null);
       } else if (type === "job:search:complete") {
         setSearching(false);
-        setResult({ total: (payload as { total: number }).total });
+        setResult((prev) => ({ total: (prev?.total ?? 0) + (payload as { total: number }).total }));
         onSearchComplete();
       } else if (type === "job:search:error") {
         setSearching(false);
+        setSearchError((payload as { message: string }).message);
+      } else if (type === "queries:generating") {
+        setAutoSearching(true);
+        setAutoStatus("Generating queries from profile...");
+        setSearchError(null);
+        setResult(null);
+      } else if (type === "queries:generated") {
+        const { count } = payload as { count: number };
+        setAutoStatus(`Generated ${count} queries, searching...`);
+      } else if (type === "queries:search:complete") {
+        const { queriesRun, jobsDiscovered } = payload as { queriesRun: number; jobsDiscovered: number };
+        setAutoSearching(false);
+        setAutoStatus(null);
+        setResult({ total: jobsDiscovered });
+        onSearchComplete();
+      } else if (type === "queries:error") {
+        setAutoSearching(false);
+        setAutoStatus(null);
         setSearchError((payload as { message: string }).message);
       }
     }
@@ -135,115 +158,146 @@ export function JobSearch({ onSearchComplete }: Props) {
     setValue("geoId", "");
   }
 
+  const [manualOpen, setManualOpen] = useState(false);
+  const isBusy = searching || autoSearching;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Job Search</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm">Job Search</CardTitle>
+          {autoStatus && (
+            <p className="text-xs text-muted-foreground animate-pulse">{autoStatus}</p>
+          )}
+        </div>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Controller
-              name="keywords"
-              control={control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel className="text-xs">Keywords</FieldLabel>
-                  <TagInput
-                    tags={toTags(field.value)}
-                    setTags={(newTags) => {
-                      const tags = typeof newTags === "function" ? newTags(toTags(field.value)) : newTags;
-                      field.onChange(fromTags(tags));
-                    }}
-                    activeTagIndex={activeKeywordIdx}
-                    setActiveTagIndex={setActiveKeywordIdx}
-                    placeholder="e.g., backend engineer"
-                    styleClasses={{ input: "shadow-none", inlineTagsContainer: "border-input" }}
-                    inlineTags
-                  />
-                  {fieldState.invalid && <FieldError>{fieldState.error?.message}</FieldError>}
-                </Field>
-              )}
-            />
+      <CardContent className="space-y-3">
+        <Button
+          size="lg"
+          className="w-full"
+          disabled={isBusy}
+          onClick={() => {
+            setSearchError(null);
+            setResult(null);
+            electrobun.rpc.send.generateAndSearch({ profileId });
+          }}
+        >
+          {autoSearching ? "Finding Jobs..." : "Find Jobs"}
+        </Button>
 
-            <Field>
-              <FieldLabel className="text-xs">Location</FieldLabel>
-              <CityAutocomplete
-                value={watch("locationText")}
-                onChange={(text) => { setValue("locationText", text); handleLocationClear(); }}
-                onSelect={handleCitySelect}
-              />
-            </Field>
-          </div>
+        {searchError && <p className="text-xs text-destructive">{searchError}</p>}
+        {result && result.total === 0 && (
+          <p className="text-xs text-muted-foreground">No new jobs found.</p>
+        )}
+        {result && result.total > 0 && (
+          <Badge variant="secondary" className="text-xs">
+            {result.total} new {result.total === 1 ? "job" : "jobs"} found
+          </Badge>
+        )}
 
-          <div className="flex items-end gap-3">
-            <Field className="flex-1">
-              <FieldLabel className="text-xs">Experience Level</FieldLabel>
-              <Controller
-                name="experienceLevel"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={(v) => field.onChange(v === "any" ? "" : v)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Any" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="any">Any</SelectItem>
-                      {EXPERIENCE_LEVELS.map((l) => (
-                        <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </Field>
-
-            <div className="flex items-center gap-2 pb-1">
-              <Controller
-                name="remote"
-                control={control}
-                render={({ field }) => (
-                  <Switch
-                    id="remote"
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                )}
-              />
-              <FieldLabel htmlFor="remote" className="text-xs">Remote</FieldLabel>
-            </div>
-
-            <Button type="submit" disabled={searching} size="sm">
-              {searching ? "Searching..." : "Search"}
+        <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="xs" className="w-full text-muted-foreground">
+              {manualOpen ? "Hide manual search" : "Manual search"}
             </Button>
-          </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <Separator className="my-3" />
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Controller
+                  name="keywords"
+                  control={control}
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <FieldLabel className="text-xs">Keywords</FieldLabel>
+                      <TagInput
+                        tags={toTags(field.value)}
+                        setTags={(newTags) => {
+                          const tags = typeof newTags === "function" ? newTags(toTags(field.value)) : newTags;
+                          field.onChange(fromTags(tags));
+                        }}
+                        activeTagIndex={activeKeywordIdx}
+                        setActiveTagIndex={setActiveKeywordIdx}
+                        placeholder="e.g., backend engineer"
+                        styleClasses={{ input: "shadow-none", inlineTagsContainer: "border-input" }}
+                        inlineTags
+                      />
+                      {fieldState.invalid && <FieldError>{fieldState.error?.message}</FieldError>}
+                    </Field>
+                  )}
+                />
 
-          <div>
-            <FieldLabel className="text-xs mb-1.5">Job Type</FieldLabel>
-            <div className="flex flex-wrap gap-1.5">
-              {JOB_TYPES.map((jt) => (
-                <Badge
-                  key={jt.value}
-                  variant={jobTypes.includes(jt.value) ? "default" : "outline"}
-                  className="cursor-pointer select-none text-xs"
-                  onClick={() => toggleJobType(jt.value)}
-                >
-                  {jt.label}
-                </Badge>
-              ))}
-            </div>
-          </div>
+                <Field>
+                  <FieldLabel className="text-xs">Location</FieldLabel>
+                  <CityAutocomplete
+                    value={watch("locationText")}
+                    onChange={(text) => { setValue("locationText", text); handleLocationClear(); }}
+                    onSelect={handleCitySelect}
+                  />
+                </Field>
+              </div>
 
-          {searchError && <p className="text-xs text-destructive">{searchError}</p>}
-          {result && result.total === 0 && (
-            <p className="text-xs text-muted-foreground">No jobs found. Try different keywords or broaden your filters.</p>
-          )}
-          {result && result.total > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              {result.total} new {result.total === 1 ? "job" : "jobs"} found
-            </Badge>
-          )}
-        </form>
+              <div className="flex items-end gap-3">
+                <Field className="flex-1">
+                  <FieldLabel className="text-xs">Experience Level</FieldLabel>
+                  <Controller
+                    name="experienceLevel"
+                    control={control}
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={(v) => field.onChange(v === "any" ? "" : v)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Any" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">Any</SelectItem>
+                          {EXPERIENCE_LEVELS.map((l) => (
+                            <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+
+                <div className="flex items-center gap-2 pb-1">
+                  <Controller
+                    name="remote"
+                    control={control}
+                    render={({ field }) => (
+                      <Switch
+                        id="remote"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    )}
+                  />
+                  <FieldLabel htmlFor="remote" className="text-xs">Remote</FieldLabel>
+                </div>
+
+                <Button type="submit" disabled={isBusy} size="sm">
+                  {searching ? "Searching..." : "Search"}
+                </Button>
+              </div>
+
+              <div>
+                <FieldLabel className="text-xs mb-1.5">Job Type</FieldLabel>
+                <div className="flex flex-wrap gap-1.5">
+                  {JOB_TYPES.map((jt) => (
+                    <Badge
+                      key={jt.value}
+                      variant={jobTypes.includes(jt.value) ? "default" : "outline"}
+                      className="cursor-pointer select-none text-xs"
+                      onClick={() => toggleJobType(jt.value)}
+                    >
+                      {jt.label}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </form>
+          </CollapsibleContent>
+        </Collapsible>
       </CardContent>
     </Card>
   );

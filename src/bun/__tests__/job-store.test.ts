@@ -168,5 +168,15 @@ describe("storeSearchQuery", () => {
     expect(row.keywords).toBe("backend engineer, fullstack");
     expect(row.location).toBe("San Francisco");
     expect(row.experience_level).toBe("4");
+    expect(row.query_type).toBe("precise");
+  });
+
+  test("stores search query with custom queryType", () => {
+    storeSearchQuery(db, 1, {
+      keywords: ["SRE"],
+    }, "exploratory");
+
+    const row = db.query("SELECT * FROM search_queries WHERE profile_id = 1").get() as any;
+    expect(row.query_type).toBe("exploratory");
   });
 });

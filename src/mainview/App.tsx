@@ -15,14 +15,15 @@ export function App() {
   const [resumeText, setResumeText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [enrichmentRegen, setEnrichmentRegen] = useState(false);
+  const [reviewFromDashboard, setReviewFromDashboard] = useState(false);
 
   useEffect(() => {
     async function init() {
       try {
         const health = await electrobun.rpc.request.getHealth();
-        const savedModel = await electrobun.rpc.request.getSelectedModel();
+        const hasKey = await electrobun.rpc.request.hasApiKey();
 
-        if (!health.ollama || !savedModel) {
+        if (!health.gemini || !hasKey) {
           setState("setup");
           return;
         }
@@ -112,8 +113,12 @@ export function App() {
         resumeText={resumeText}
         onSave={(updated) => {
           setProfile(updated);
+          setReviewFromDashboard(false);
           setState("enrichment");
         }}
+        onCancel={reviewFromDashboard
+          ? () => { setReviewFromDashboard(false); setState("dashboard"); }
+          : undefined}
       />
     );
   }
@@ -156,6 +161,7 @@ export function App() {
           try {
             const text = await electrobun.rpc.request.getResumeText();
             setResumeText(text ?? "");
+            setReviewFromDashboard(true);
             setState("review");
           } catch (e: any) {
             setError(e.message ?? "Failed to load resume text");

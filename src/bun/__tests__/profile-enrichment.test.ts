@@ -4,7 +4,7 @@ import { mock } from "bun:test";
 import { z } from "zod/v4";
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
-import { OllamaClient } from "../ollama-client";
+import { GeminiClient } from "../gemini-client";
 import { storeProfile, getProfile } from "../profile-store";
 import { generateQuestions, submitEnrichmentAnswers } from "../profile-enrichment";
 import type { Profile, ResumeParseResult, EnrichmentQuestion, EnrichmentAnswer } from "../../shared/types";
@@ -26,10 +26,20 @@ const parseResult: ResumeParseResult = {
     remote: true,
     min_salary: null,
     company_sizes: [],
+    country: null,
   },
 };
 
-function makeOllamaQuestionResponse(): string {
+function geminiResponse(text: string): Response {
+  return new Response(
+    JSON.stringify({
+      candidates: [{ content: { parts: [{ text }] } }],
+    }),
+    { status: 200 }
+  );
+}
+
+function makeQuestionResponse(): string {
   return JSON.stringify({
     questions: [
       { question: "What kind of role are you looking for next, and what are your absolute dealbreakers?", category: "career_intent", guided_prompt: "Think about company size, culture, and work style preferences." },
@@ -43,12 +53,12 @@ function makeOllamaQuestionResponse(): string {
 
 describe("generateQuestions", () => {
   let mockFetch: ReturnType<typeof mock>;
-  let ollama: OllamaClient;
+  let gemini: GeminiClient;
   let db: Database;
 
   beforeEach(() => {
     mockFetch = mock();
-    ollama = new OllamaClient("http://localhost:11434", mockFetch as any);
+    gemini = new GeminiClient("test-key", mockFetch as any);
     db = new Database(":memory:");
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(migrationSql);
@@ -58,14 +68,9 @@ describe("generateQuestions", () => {
     storeProfile(db, parseResult, "Jane Doe resume text");
     const profile = getProfile(db)!;
 
-    mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ response: makeOllamaQuestionResponse() }),
-        { status: 200 }
-      )
-    );
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeQuestionResponse()));
 
-    const questions = await generateQuestions(db, profile, ollama, "qwen2.5:7b");
+    const questions = await generateQuestions(db, profile, gemini);
 
     expect(questions).toHaveLength(5);
 
@@ -84,17 +89,12 @@ describe("generateQuestions", () => {
     storeProfile(db, parseResult, "Jane Doe resume text");
     const profile = getProfile(db)!;
 
-    mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ response: makeOllamaQuestionResponse() }),
-        { status: 200 }
-      )
-    );
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeQuestionResponse()));
 
-    await generateQuestions(db, profile, ollama, "qwen2.5:7b");
+    await generateQuestions(db, profile, gemini);
 
     const body = JSON.parse((mockFetch.mock.calls[0] as any[])[1].body);
-    const prompt = body.prompt as string;
+    const prompt = body.contents[0].parts[0].text as string;
 
     expect(prompt).toContain("Backend Engineer");
     expect(prompt).toContain("TypeScript");
@@ -106,15 +106,10 @@ describe("generateQuestions", () => {
     storeProfile(db, parseResult, "Jane Doe resume text");
     const profile = getProfile(db)!;
 
-    mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ response: makeOllamaQuestionResponse() }),
-        { status: 200 }
-      )
-    );
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeQuestionResponse()));
 
-    const first = await generateQuestions(db, profile, ollama, "qwen2.5:7b");
-    const second = await generateQuestions(db, profile, ollama, "qwen2.5:7b");
+    const first = await generateQuestions(db, profile, gemini);
+    const second = await generateQuestions(db, profile, gemini);
 
     expect(second).toEqual(first);
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -124,27 +119,16 @@ describe("generateQuestions", () => {
     storeProfile(db, parseResult, "Jane Doe resume text");
     const profile = getProfile(db)!;
 
-    mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ response: makeOllamaQuestionResponse() }),
-        { status: 200 }
-      )
-    );
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeQuestionResponse()));
 
-    await generateQuestions(db, profile, ollama, "qwen2.5:7b");
+    await generateQuestions(db, profile, gemini);
 
-    // simulate profile update (updated_at changes)
     db.query("UPDATE profiles SET seniority = 'Staff', updated_at = datetime('now', '+1 second') WHERE id = ?").run(profile.id);
     const updatedProfile = getProfile(db)!;
 
-    mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ response: makeOllamaQuestionResponse() }),
-        { status: 200 }
-      )
-    );
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeQuestionResponse()));
 
-    await generateQuestions(db, updatedProfile, ollama, "qwen2.5:7b");
+    await generateQuestions(db, updatedProfile, gemini);
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
@@ -158,7 +142,7 @@ const sampleAnswers: EnrichmentAnswer[] = [
   { question: "How deep is your PostgreSQL expertise?", answer: "Advanced query optimization, pg_stat tracking, logical replication setup.", category: "technical_depth" },
 ];
 
-function makeOllamaExtractionResponse(): string {
+function makeExtractionResponse(): string {
   return JSON.stringify({
     career_intent: "Staff-level backend engineer at a mid-size company, fully remote",
     dealbreakers: ["no onsite", "no startups under 20 people", "minimum 200k salary"],
@@ -175,12 +159,12 @@ function makeOllamaExtractionResponse(): string {
 
 describe("submitEnrichmentAnswers", () => {
   let mockFetch: ReturnType<typeof mock>;
-  let ollama: OllamaClient;
+  let gemini: GeminiClient;
   let db: Database;
 
   beforeEach(() => {
     mockFetch = mock();
-    ollama = new OllamaClient("http://localhost:11434", mockFetch as any);
+    gemini = new GeminiClient("test-key", mockFetch as any);
     db = new Database(":memory:");
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(migrationSql);
@@ -189,14 +173,9 @@ describe("submitEnrichmentAnswers", () => {
   test("saves raw answers to enrichment_answers table", async () => {
     const profileId = storeProfile(db, parseResult, "resume text");
 
-    mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ response: makeOllamaExtractionResponse() }),
-        { status: 200 }
-      )
-    );
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeExtractionResponse()));
 
-    await submitEnrichmentAnswers(db, profileId, sampleAnswers, ollama, "qwen2.5:7b");
+    await submitEnrichmentAnswers(db, profileId, sampleAnswers, gemini);
 
     const rows = db.query("SELECT * FROM enrichment_answers WHERE profile_id = ?").all(profileId) as any[];
     expect(rows).toHaveLength(5);
@@ -208,18 +187,13 @@ describe("submitEnrichmentAnswers", () => {
   test("calls LLM to extract structured enrichment data from answers", async () => {
     const profileId = storeProfile(db, parseResult, "resume text");
 
-    mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ response: makeOllamaExtractionResponse() }),
-        { status: 200 }
-      )
-    );
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeExtractionResponse()));
 
-    await submitEnrichmentAnswers(db, profileId, sampleAnswers, ollama, "qwen2.5:7b");
+    await submitEnrichmentAnswers(db, profileId, sampleAnswers, gemini);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const body = JSON.parse((mockFetch.mock.calls[0] as any[])[1].body);
-    const prompt = body.prompt as string;
+    const prompt = body.contents[0].parts[0].text as string;
     expect(prompt).toContain("Staff-level backend at a mid-size company");
     expect(prompt).toContain("No onsite");
   });
@@ -227,14 +201,9 @@ describe("submitEnrichmentAnswers", () => {
   test("merges extracted data into profile and returns updated profile", async () => {
     const profileId = storeProfile(db, parseResult, "resume text");
 
-    mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ response: makeOllamaExtractionResponse() }),
-        { status: 200 }
-      )
-    );
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeExtractionResponse()));
 
-    const updated = await submitEnrichmentAnswers(db, profileId, sampleAnswers, ollama, "qwen2.5:7b");
+    const updated = await submitEnrichmentAnswers(db, profileId, sampleAnswers, gemini);
 
     expect(updated.career_intent).toBe("Staff-level backend engineer at a mid-size company, fully remote");
     expect(updated.dealbreakers).toContain("no onsite");
@@ -242,7 +211,6 @@ describe("submitEnrichmentAnswers", () => {
     expect(updated.problem_solving_stories).toHaveLength(2);
     expect(updated.technical_depth).toHaveLength(2);
 
-    // verify persisted in DB
     const fromDb = getProfile(db)!;
     expect(fromDb.career_intent).toBe(updated.career_intent);
     expect(fromDb.dealbreakers).toEqual(updated.dealbreakers);
@@ -251,33 +219,21 @@ describe("submitEnrichmentAnswers", () => {
   test("replaces old answers on re-answer", async () => {
     const profileId = storeProfile(db, parseResult, "resume text");
 
-    // first submission
-    mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ response: makeOllamaExtractionResponse() }),
-        { status: 200 }
-      )
-    );
-    await submitEnrichmentAnswers(db, profileId, sampleAnswers, ollama, "qwen2.5:7b");
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeExtractionResponse()));
+    await submitEnrichmentAnswers(db, profileId, sampleAnswers, gemini);
 
-    // second submission with different answers
     const newAnswers: EnrichmentAnswer[] = [
       { question: "What role?", answer: "Principal engineer at FAANG.", category: "career_intent" },
     ];
     mockFetch.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          response: JSON.stringify({
-            career_intent: "Principal engineer at FAANG",
-            dealbreakers: [],
-            problem_solving_stories: [],
-            technical_depth: [],
-          }),
-        }),
-        { status: 200 }
-      )
+      geminiResponse(JSON.stringify({
+        career_intent: "Principal engineer at FAANG",
+        dealbreakers: [],
+        problem_solving_stories: [],
+        technical_depth: [],
+      }))
     );
-    await submitEnrichmentAnswers(db, profileId, newAnswers, ollama, "qwen2.5:7b");
+    await submitEnrichmentAnswers(db, profileId, newAnswers, gemini);
 
     const rows = db.query("SELECT * FROM enrichment_answers WHERE profile_id = ?").all(profileId) as any[];
     expect(rows).toHaveLength(1);
