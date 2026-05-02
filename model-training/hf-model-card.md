@@ -7,12 +7,19 @@ tags:
   - cross-encoder
   - sentence-transformers
   - onnx
+datasets:
+  - oksomu/role-radar-dataset
+base_model:
+  - cross-encoder/ms-marco-MiniLM-L-6-v2
+  - sentence-transformers/all-MiniLM-L6-v2
 pipeline_tag: text-classification
 ---
 
 # Role Radar — Job-Profile Fit Scoring Models
 
 Local-first two-stage scoring pipeline for job-candidate fit prediction. Trained on Indian job market data across 15 role families.
+
+**GitHub:** [somus/role-radar](https://github.com/somus/role-radar) | **Dataset:** [oksomu/role-radar-dataset](https://huggingface.co/datasets/oksomu/role-radar-dataset)
 
 ## Models
 
