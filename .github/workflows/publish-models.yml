@@ -20,10 +20,8 @@ jobs:
       - name: Install HuggingFace CLI
         run: pip install "huggingface_hub[cli]"
 
-      - name: Export ONNX models (pre-trained, local)
+      - name: Verify ONNX models exist
         run: |
-          # Models are exported locally before tagging.
-          # Verify they exist in data/models/onnx/
           test -f model-training/data/models/onnx/skills_lgbm.onnx || \
             { echo "ERROR: Run 'python3 export_onnx.py' locally before tagging"; exit 1; }
 
@@ -31,26 +29,20 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          hf login --token $HF_TOKEN
-          hf repo create $HF_MODEL_REPO --type model || true
-          hf upload $HF_MODEL_REPO \
-            model-training/data/models/onnx/ . \
+          hf auth login --token $HF_TOKEN --add-to-git-credential
+          hf upload $HF_MODEL_REPO model-training/data/models/onnx/ . \
+            --repo-type model \
             --commit-message "$(git describe --tags)"
-          hf upload $HF_MODEL_REPO \
-            model-training/hf-model-card.md README.md
+          hf upload $HF_MODEL_REPO model-training/hf-model-card.md README.md \
+            --repo-type model
 
       - name: Publish dataset
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          hf login --token $HF_TOKEN
-          hf repo create $HF_DATASET_REPO --type dataset || true
-          cd model-training/data
-          hf upload $HF_DATASET_REPO \
-            scraped_jobs.json synthetic_profiles.json benchmarks.json \
-            gold_labels.json phase2_pairs.json phase2_labels.json \
-            phase3_pairs.json phase3_labels.json . \
+          hf upload $HF_DATASET_REPO model-training/data/ . \
+            --repo-type dataset \
+            --include "*.json" \
             --commit-message "$(git describe --tags)"
-          cd ../..
-          hf upload $HF_DATASET_REPO \
-            model-training/hf-dataset-card.md README.md
+          hf upload $HF_DATASET_REPO model-training/hf-dataset-card.md README.md \
+            --repo-type dataset
