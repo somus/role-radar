@@ -1,0 +1,43 @@
+{
+  "feature_names": [
+    "must_have_skill_overlap_ratio",
+    "nice_to_have_skill_overlap_ratio",
+    "total_skill_overlap_count",
+    "missing_must_have_count",
+    "seniority_delta",
+    "seniority_match_exact",
+    "role_family_match",
+    "role_family_adjacent",
+    "domain_match",
+    "domain_adjacent",
+    "location_compatible",
+    "remote_match",
+    "experience_years_delta",
+    "title_similarity",
+    "management_mismatch",
+    "adjacent_skill_overlap_ratio",
+    "industry_domain_match",
+    "industry_domain_adjacent",
+    "skill_embedding_sim"
+  ],
+  "composite_weights": {
+    "skills": 0.5,
+    "location": 0.25,
+    "seniority": 0.15,
+    "domain": 0.1
+  },
+  "shortlist_threshold": 60,
+  "overqualified_threshold": 2,
+  "score_range": {
+    "min": 50,
+    "max": 100
+  },
+  "models": {
+    "skills_lgbm": "skills_lgbm.onnx",
+    "skills_calibration": "skills_calibration.json",
+    "embedding_encoder": "embedding_encoder.onnx",
+    "embedding_tokenizer": "embedding_tokenizer/",
+    "reranker": "reranker.onnx",
+    "reranker_tokenizer": "reranker_tokenizer/"
+  }
+}

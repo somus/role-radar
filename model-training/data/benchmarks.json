@@ -1,0 +1,572 @@
+{
+  "benchmark_profile": {
+    "profile_id": 0,
+    "roles": [
+      "Senior Backend Engineer",
+      "Fullstack Software Engineer"
+    ],
+    "skills_primary": [
+      "TypeScript",
+      "React",
+      "Node.js",
+      "GraphQL",
+      "PostgreSQL"
+    ],
+    "skills_secondary": [
+      "AWS",
+      "Docker",
+      "Kubernetes",
+      "Redis",
+      "Python"
+    ],
+    "experience_years": 10,
+    "seniority": "Senior",
+    "domains": [
+      "Education",
+      "Enterprise SaaS"
+    ],
+    "preferences": {
+      "locations": [
+        "Bangalore",
+        "Remote"
+      ],
+      "remote": true,
+      "min_salary": null,
+      "company_sizes": []
+    },
+    "career_intent": "Looking for senior/staff roles at product companies with strong engineering culture",
+    "dealbreakers": [
+      "No startups under 20 people",
+      "No cryptocurrency companies"
+    ]
+  },
+  "jobs": [
+    {
+      "id": "job_1",
+      "title": "Senior Backend Engineer",
+      "company": "Stripe",
+      "location": "Bangalore, India",
+      "seniority_hint": "Senior",
+      "role_family_hint": "backend",
+      "domain_hint": "Fintech",
+      "experience_years_hint": 7,
+      "remote_hint": false,
+      "description": "We're looking for a Senior Backend Engineer to build and scale our payment infrastructure serving millions of merchants worldwide.\n\nRequirements:\n- 7+ years of backend engineering experience\n- Strong systems design and distributed systems expertise\n- Production experience with TypeScript/Node.js and relational databases (PostgreSQL preferred)\n- Track record of building and operating high-availability services\n\nNice to have:\n- Experience with GraphQL APIs, Redis caching, message queues (Kafka/RabbitMQ)\n- Payments or fintech domain experience\n- Contributions to open-source projects"
+    },
+    {
+      "id": "job_2",
+      "title": "Frontend Developer",
+      "company": "CryptoTrade Labs",
+      "location": "Mumbai, India",
+      "seniority_hint": "Junior",
+      "role_family_hint": "frontend",
+      "domain_hint": "Crypto",
+      "experience_years_hint": 2,
+      "remote_hint": false,
+      "description": "Join our fast-growing 8-person team building the next generation crypto trading dashboard!\n\nRequirements:\n- 2+ years of React experience\n- Strong CSS/TailwindCSS skills\n- Comfortable with a fast-paced, ambiguous startup environment\n- Interest in cryptocurrency and DeFi\n\nNice to have:\n- Web3 wallet integration experience (MetaMask, WalletConnect)"
+    },
+    {
+      "id": "job_3",
+      "title": "Staff Platform Engineer",
+      "company": "Atlassian",
+      "location": "Remote",
+      "seniority_hint": "Staff",
+      "role_family_hint": "devops",
+      "domain_hint": "Developer Tools",
+      "experience_years_hint": 10,
+      "remote_hint": true,
+      "description": "Platform Engineering at Atlassian powers the infrastructure behind Jira, Confluence, and Bitbucket.\n\nRequirements:\n- 10+ years of software engineering experience, with 5+ in platform/infrastructure roles\n- Deep expertise in Kubernetes, container orchestration, and cloud platforms (AWS preferred)\n- Strong programming skills in Go and/or TypeScript\n- Experience leading technical initiatives across multiple teams\n\nNice to have:\n- Terraform and infrastructure-as-code experience\n- Internal developer platform experience"
+    },
+    {
+      "id": "job_4",
+      "title": "Full Stack Developer",
+      "company": "Learnify (EdTech)",
+      "location": "Bangalore, India",
+      "seniority_hint": "Mid",
+      "role_family_hint": "fullstack",
+      "domain_hint": "Education",
+      "experience_years_hint": 5,
+      "remote_hint": false,
+      "description": "Building the learning management system used by 5 million students across 200 universities in India.\n\nRequirements:\n- 5+ years of full-stack development experience\n- Strong proficiency in React, Node.js, and PostgreSQL\n- Experience building real-time features (WebSocket, SSE)\n- Familiarity with REST and GraphQL API design\n- Education technology or EdTech domain experience preferred\n\nNice to have:\n- Experience with video streaming infrastructure\n- AWS/cloud deployment experience"
+    },
+    {
+      "id": "job_5",
+      "title": "Junior Python Developer",
+      "company": "DataFlow Analytics",
+      "location": "Delhi, India (On-site)",
+      "seniority_hint": "Junior",
+      "role_family_hint": "data",
+      "domain_hint": "Analytics",
+      "experience_years_hint": 0,
+      "remote_hint": false,
+      "description": "Entry-level position on our data engineering team building ETL pipelines for enterprise clients.\n\nRequirements:\n- 0-2 years of professional experience (new graduates welcome)\n- Basic proficiency in Python and SQL\n- Familiarity with data concepts (ETL, data warehousing)\n\nNice to have:\n- Apache Airflow, BigQuery, Snowflake experience\n- Cloud platforms (GCP, AWS)"
+    },
+    {
+      "id": "job_6",
+      "title": "Senior Fullstack Engineer",
+      "company": "Freshworks",
+      "location": "Remote",
+      "seniority_hint": "Senior",
+      "role_family_hint": "fullstack",
+      "domain_hint": "Enterprise SaaS",
+      "experience_years_hint": 8,
+      "remote_hint": true,
+      "description": "Senior Fullstack Engineer working on our core engagement platform.\n\nRequirements:\n- 8+ years of software engineering experience\n- Strong proficiency in React, TypeScript, and Node.js\n- Experience with PostgreSQL and REST API design\n- Understanding of multi-tenant SaaS architecture patterns\n\nNice to have:\n- Enterprise SaaS product experience\n- Redis caching and message queues\n- GraphQL API design experience"
+    },
+    {
+      "id": "job_7",
+      "title": "Junior Java Developer",
+      "company": "MedTech Solutions",
+      "location": "Hyderabad, India",
+      "seniority_hint": "Junior",
+      "role_family_hint": "backend",
+      "domain_hint": "Healthcare",
+      "experience_years_hint": 0,
+      "remote_hint": false,
+      "description": "Junior Java developer for our backend team building REST APIs for healthcare records management.\n\nRequirements:\n- 0-2 years of professional experience (fresh graduates welcome)\n- Proficiency in Java and basic Spring Boot knowledge\n- Understanding of SQL and relational databases\n\nNice to have:\n- Healthcare domain knowledge\n- Docker containers\n- Microservice architecture"
+    },
+    {
+      "id": "job_8",
+      "title": "Staff DevOps Engineer",
+      "company": "Zoho",
+      "location": "Bangalore, India",
+      "seniority_hint": "Staff",
+      "role_family_hint": "devops",
+      "domain_hint": "Enterprise SaaS",
+      "experience_years_hint": 10,
+      "remote_hint": false,
+      "description": "Lead our DevOps transformation initiative across product engineering teams.\n\nRequirements:\n- 10+ years of software engineering experience, 5+ in DevOps/platform roles\n- Deep expertise in Kubernetes, container orchestration, and AWS\n- Strong proficiency in Docker, Terraform, and infrastructure-as-code\n- Scripting skills in TypeScript or Python\n\nNice to have:\n- React experience for internal tooling dashboards\n- Multi-cloud deployment experience"
+    },
+    {
+      "id": "job_9",
+      "title": "iOS Developer",
+      "company": "GameStudio X",
+      "location": "Pune, India",
+      "seniority_hint": "Mid",
+      "role_family_hint": "mobile",
+      "domain_hint": "Gaming",
+      "experience_years_hint": 3,
+      "remote_hint": false,
+      "description": "Build and optimize mobile games for iOS.\n\nRequirements:\n- 3+ years of iOS development experience with Swift\n- Experience with UIKit, SpriteKit, or similar game frameworks\n- Understanding of game physics, collision detection, and animation\n- Published game or interactive app on the App Store\n\nNice to have:\n- Metal or SceneKit for 3D rendering\n- Shader programming experience"
+    },
+    {
+      "id": "job_10",
+      "title": "Senior Solutions Architect",
+      "company": "Shopify",
+      "location": "Remote",
+      "seniority_hint": "Senior",
+      "role_family_hint": "backend",
+      "domain_hint": "E-commerce",
+      "experience_years_hint": 8,
+      "remote_hint": true,
+      "description": "Design the next generation of our e-commerce platform architecture.\n\nRequirements:\n- 8+ years of software engineering with 3+ in architecture roles\n- Deep expertise in Node.js, TypeScript, and distributed systems design\n- Production experience with GraphQL, PostgreSQL, and Redis\n- Understanding of event-driven architectures and message queues\n\nNice to have:\n- E-commerce or marketplace platform experience\n- Kubernetes and cloud-native deployment"
+    },
+    {
+      "id": "job_11",
+      "title": "PHP Intern",
+      "company": "RealtyApp",
+      "location": "Chennai, India",
+      "seniority_hint": "Junior",
+      "role_family_hint": "fullstack",
+      "domain_hint": "Real Estate",
+      "experience_years_hint": 0,
+      "remote_hint": false,
+      "description": "3-month internship with possible full-time conversion at a 15-person startup.\n\nRequirements:\n- Currently enrolled in or recently graduated from CS/IT program\n- Basic knowledge of PHP and SQL\n- Understanding of HTML, CSS, and basic JavaScript\n\nNice to have:\n- Laravel framework\n- REST APIs"
+    },
+    {
+      "id": "job_12",
+      "title": "Senior ML Engineer",
+      "company": "EduAI",
+      "location": "Bangalore, India",
+      "seniority_hint": "Senior",
+      "role_family_hint": "data",
+      "domain_hint": "Education",
+      "experience_years_hint": 5,
+      "remote_hint": false,
+      "description": "Senior ML Engineer bridging ML models with production systems for personalized learning.\n\nRequirements:\n- 5+ years of software engineering, 3+ in ML/AI roles\n- Strong Python skills with PyTorch or TensorFlow\n- Production experience with React and Node.js for ML tooling\n- Understanding of recommendation systems and collaborative filtering\n\nNice to have:\n- EdTech or education domain experience\n- NLP for educational content analysis"
+    },
+    {
+      "id": "job_13",
+      "title": "Systems Engineer (Rust)",
+      "company": "CryptoSafe Infra",
+      "location": "Remote",
+      "seniority_hint": "Mid",
+      "role_family_hint": "systems",
+      "domain_hint": "Fintech",
+      "experience_years_hint": 5,
+      "remote_hint": true,
+      "description": "Systems Engineer building high-performance trading infrastructure in Rust.\n\nRequirements:\n- 5+ years of systems programming experience\n- Strong proficiency in Rust with production deployment experience\n- Deep understanding of networking, concurrency, and memory management\n- Experience with WebSocket protocols and binary serialization\n\nNice to have:\n- Fintech or cryptocurrency exchange experience\n- TypeScript/React for monitoring tools"
+    },
+    {
+      "id": "job_14",
+      "title": "Embedded C++ Developer",
+      "company": "AutoDrive Corp",
+      "location": "Detroit, USA",
+      "seniority_hint": "Junior",
+      "role_family_hint": "systems",
+      "domain_hint": "Automotive",
+      "experience_years_hint": 2,
+      "remote_hint": false,
+      "description": "Embedded C++ developer working on ADAS firmware for commercial vehicles.\n\nRequirements:\n- 2+ years of embedded systems development\n- Strong C++17 proficiency with RTOS experience (FreeRTOS, QNX)\n- Knowledge of CAN bus protocols and automotive communication standards\n- Understanding of ISO 26262 functional safety requirements\n\nNice to have:\n- Sensor fusion or computer vision algorithms\n- AUTOSAR architecture"
+    },
+    {
+      "id": "job_15",
+      "title": "Staff Software Engineer",
+      "company": "Atlassian",
+      "location": "Bangalore, India",
+      "seniority_hint": "Staff",
+      "role_family_hint": "fullstack",
+      "domain_hint": "Enterprise SaaS",
+      "experience_years_hint": 10,
+      "remote_hint": false,
+      "description": "Staff Software Engineer leading development of next-generation collaboration features.\n\nRequirements:\n- 10+ years of software engineering experience\n- Expert-level TypeScript, React, Node.js, and GraphQL\n- Deep experience with PostgreSQL, caching strategies, and distributed systems\n- Production Kubernetes and AWS experience\n- Enterprise SaaS experience required\n\nNice to have:\n- Developer tools or collaboration platform experience\n- Real-time collaboration features (CRDTs, OT)"
+    },
+    {
+      "id": "job_16",
+      "title": "Android Developer",
+      "company": "SocialBuzz",
+      "location": "Mumbai, India",
+      "seniority_hint": "Mid",
+      "role_family_hint": "mobile",
+      "domain_hint": "Social Media",
+      "experience_years_hint": 3,
+      "remote_hint": false,
+      "description": "Android developer building features for our social media app.\n\nRequirements:\n- 3-5 years of Android development experience\n- Strong Kotlin skills with Jetpack Compose and modern Android architecture\n- Published app on Google Play Store\n- Experience with video playback (ExoPlayer) or camera APIs\n\nNice to have:\n- React Native experience\n- Real-time messaging (WebSocket, Firebase)"
+    },
+    {
+      "id": "job_17",
+      "title": "Senior Backend Engineer",
+      "company": "LogiTrack",
+      "location": "Remote",
+      "seniority_hint": "Senior",
+      "role_family_hint": "backend",
+      "domain_hint": "Logistics",
+      "experience_years_hint": 7,
+      "remote_hint": true,
+      "description": "Senior Backend Engineer building core tracking and event processing platform.\n\nRequirements:\n- 7+ years of backend engineering experience\n- Strong TypeScript and Node.js proficiency\n- Production PostgreSQL experience with complex queries and indexing\n- Docker and containerized deployment experience\n- Experience with event-driven architectures and message queues\n\nNice to have:\n- Supply chain, logistics, or transportation domain experience\n- Redis Streams or Apache Kafka\n- GraphQL API design experience"
+    },
+    {
+      "id": "job_18",
+      "title": "Data Engineer",
+      "company": "InsightMetrics",
+      "location": "Bangalore, India (Hybrid)",
+      "seniority_hint": "Mid",
+      "role_family_hint": "data",
+      "domain_hint": "Analytics",
+      "experience_years_hint": 5,
+      "remote_hint": false,
+      "description": "Data Engineer building and maintaining data pipeline infrastructure for product analytics.\n\nRequirements:\n- 5+ years of data engineering experience\n- Strong Apache Spark and Kafka proficiency\n- Experience with SQL, data modeling, and warehouse design\n- AWS experience (S3, Redshift, EMR, Glue)\n- Node.js API development experience\n\nNice to have:\n- React dashboard building experience\n- Real-time analytics (Flink, Druid)"
+    },
+    {
+      "id": "job_19",
+      "title": "Junior Ruby Developer",
+      "company": "CoinSwap",
+      "location": "Singapore",
+      "seniority_hint": "Junior",
+      "role_family_hint": "backend",
+      "domain_hint": "Crypto",
+      "experience_years_hint": 1,
+      "remote_hint": false,
+      "description": "Junior Ruby developer joining our trading platform team.\n\nRequirements:\n- 1-3 years of Ruby on Rails experience\n- Basic PostgreSQL and SQL knowledge\n- Understanding of WebSocket protocols\n- Interest in cryptocurrency and DeFi ecosystems required\n\nNice to have:\n- Redis caching\n- Blockchain concepts"
+    },
+    {
+      "id": "job_20",
+      "title": "Senior Product Engineer",
+      "company": "Byju's",
+      "location": "Bangalore, India",
+      "seniority_hint": "Senior",
+      "role_family_hint": "fullstack",
+      "domain_hint": "Education",
+      "experience_years_hint": 7,
+      "remote_hint": false,
+      "description": "Senior Product Engineer building learning platform features for millions of students.\n\nRequirements:\n- 7+ years of full-stack development experience\n- Strong React, Node.js, GraphQL, and PostgreSQL proficiency\n- Experience building real-time features (WebSocket, SSE)\n- Education technology experience required\n\nNice to have:\n- Recommendation systems or personalization\n- Video streaming and content delivery"
+    },
+    {
+      "id": "job_21",
+      "title": "Salesforce Developer",
+      "company": "CRMPro",
+      "location": "Remote",
+      "seniority_hint": "Mid",
+      "role_family_hint": "non-tech",
+      "domain_hint": "CRM",
+      "experience_years_hint": 3,
+      "remote_hint": true,
+      "description": "Salesforce Developer building custom solutions for enterprise clients.\n\nRequirements:\n- 3-5 years of Salesforce development experience\n- Salesforce Platform Developer I certification (PD1)\n- Proficiency in Apex, SOQL, and Lightning Web Components\n- Experience with Salesforce REST and SOAP API integrations\n\nNice to have:\n- Salesforce Platform Developer II certification\n- JavaScript and web development background"
+    },
+    {
+      "id": "job_22",
+      "title": "Senior Frontend Engineer",
+      "company": "HRTech Solutions",
+      "location": "Remote",
+      "seniority_hint": "Senior",
+      "role_family_hint": "frontend",
+      "domain_hint": "HR Tech",
+      "experience_years_hint": 6,
+      "remote_hint": true,
+      "description": "Senior Frontend Engineer building HR analytics dashboards and data visualization features.\n\nRequirements:\n- 6+ years of frontend engineering experience\n- Expert React and TypeScript skills\n- Node.js BFF layer development experience\n- Experience with data visualization libraries\n- Understanding of accessibility standards (WCAG 2.1)\n\nNice to have:\n- HR Tech or Enterprise SaaS experience\n- GraphQL API design and consumption"
+    },
+    {
+      "id": "job_23",
+      "title": "Full Stack Developer",
+      "company": "TravelEase",
+      "location": "Goa, India",
+      "seniority_hint": "Mid",
+      "role_family_hint": "fullstack",
+      "domain_hint": "Travel",
+      "experience_years_hint": 4,
+      "remote_hint": false,
+      "description": "Full Stack Developer building booking, search, and payment features for travel platform.\n\nRequirements:\n- 4+ years of full-stack development experience\n- Proficiency in Vue.js or React for frontend development\n- Strong PHP/Laravel backend experience with MySQL\n- Payment integration experience (Razorpay, Stripe, or similar)\n\nNice to have:\n- Travel industry or marketplace platform experience\n- Elasticsearch or Algolia"
+    },
+    {
+      "id": "job_24",
+      "title": "COBOL Programmer",
+      "company": "LegacyBank Corp",
+      "location": "Rural Ohio, USA",
+      "seniority_hint": "Junior",
+      "role_family_hint": "systems",
+      "domain_hint": "Banking",
+      "experience_years_hint": 2,
+      "remote_hint": false,
+      "description": "COBOL Programmer maintaining legacy core banking transaction processing systems on IBM z/OS mainframes.\n\nRequirements:\n- 2+ years of COBOL programming experience on IBM mainframes\n- Proficiency in JCL, VSAM, and DB2\n- Understanding of banking operations (general ledger, ACH, wire transfers)\n- Experience with batch processing and job scheduling\n\nNice to have:\n- CICS online transaction processing\n- Mainframe modernization projects"
+    },
+    {
+      "id": "job_25",
+      "title": "Staff Platform Engineer",
+      "company": "Chargebee",
+      "location": "Bangalore, India",
+      "seniority_hint": "Staff",
+      "role_family_hint": "fullstack",
+      "domain_hint": "Enterprise SaaS",
+      "experience_years_hint": 10,
+      "remote_hint": false,
+      "description": "Staff Platform Engineer building the infrastructure that powers subscription billing engine.\n\nRequirements:\n- 10+ years of software engineering experience\n- Expert TypeScript, React, Node.js, and GraphQL proficiency\n- Deep PostgreSQL experience with partitioning, replication, and performance tuning\n- Production Kubernetes and AWS infrastructure experience\n- Enterprise SaaS platform experience required\n\nNice to have:\n- Subscription/recurring billing domain expertise\n- Event sourcing or CQRS patterns"
+    }
+  ],
+  "baselines": [
+    {
+      "job_id": "job_1",
+      "skills": 90,
+      "seniority": 95,
+      "domain": 40,
+      "location": 100,
+      "composite": 86,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_2",
+      "skills": 50,
+      "seniority": 20,
+      "domain": 0,
+      "location": 40,
+      "composite": 34,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_3",
+      "skills": 70,
+      "seniority": 85,
+      "domain": 50,
+      "location": 100,
+      "composite": 78,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_4",
+      "skills": 85,
+      "seniority": 70,
+      "domain": 90,
+      "location": 100,
+      "composite": 87,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_5",
+      "skills": 15,
+      "seniority": 5,
+      "domain": 10,
+      "location": 30,
+      "composite": 16,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_6",
+      "skills": 80,
+      "seniority": 90,
+      "domain": 70,
+      "location": 100,
+      "composite": 84,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_7",
+      "skills": 30,
+      "seniority": 15,
+      "domain": 20,
+      "location": 60,
+      "composite": 32,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_8",
+      "skills": 75,
+      "seniority": 85,
+      "domain": 60,
+      "location": 100,
+      "composite": 79,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_9",
+      "skills": 40,
+      "seniority": 30,
+      "domain": 10,
+      "location": 50,
+      "composite": 36,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_10",
+      "skills": 85,
+      "seniority": 80,
+      "domain": 80,
+      "location": 100,
+      "composite": 85,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_11",
+      "skills": 20,
+      "seniority": 10,
+      "domain": 5,
+      "location": 40,
+      "composite": 20,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_12",
+      "skills": 70,
+      "seniority": 75,
+      "domain": 85,
+      "location": 100,
+      "composite": 78,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_13",
+      "skills": 60,
+      "seniority": 50,
+      "domain": 30,
+      "location": 100,
+      "composite": 59,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_14",
+      "skills": 10,
+      "seniority": 10,
+      "domain": 0,
+      "location": 20,
+      "composite": 11,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_15",
+      "skills": 90,
+      "seniority": 95,
+      "domain": 75,
+      "location": 100,
+      "composite": 90,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_16",
+      "skills": 45,
+      "seniority": 40,
+      "domain": 15,
+      "location": 70,
+      "composite": 43,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_17",
+      "skills": 80,
+      "seniority": 85,
+      "domain": 50,
+      "location": 100,
+      "composite": 79,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_18",
+      "skills": 55,
+      "seniority": 60,
+      "domain": 40,
+      "location": 80,
+      "composite": 57,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_19",
+      "skills": 25,
+      "seniority": 20,
+      "domain": 0,
+      "location": 30,
+      "composite": 21,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_20",
+      "skills": 85,
+      "seniority": 90,
+      "domain": 90,
+      "location": 100,
+      "composite": 89,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_21",
+      "skills": 35,
+      "seniority": 30,
+      "domain": 20,
+      "location": 100,
+      "composite": 43,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_22",
+      "skills": 75,
+      "seniority": 80,
+      "domain": 60,
+      "location": 100,
+      "composite": 77,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_23",
+      "skills": 50,
+      "seniority": 45,
+      "domain": 35,
+      "location": 60,
+      "composite": 48,
+      "overqualified": false
+    },
+    {
+      "job_id": "job_24",
+      "skills": 5,
+      "seniority": 5,
+      "domain": 0,
+      "location": 10,
+      "composite": 5,
+      "overqualified": true
+    },
+    {
+      "job_id": "job_25",
+      "skills": 88,
+      "seniority": 90,
+      "domain": 85,
+      "location": 100,
+      "composite": 90,
+      "overqualified": false
+    }
+  ]
+}

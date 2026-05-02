@@ -1,0 +1,56 @@
+name: Publish Models to HuggingFace
+
+on:
+  push:
+    tags: ['model-v*']
+  workflow_dispatch:
+
+env:
+  HF_MODEL_REPO: ${{ vars.HF_USERNAME }}/role-radar-scoring
+  HF_DATASET_REPO: ${{ vars.HF_USERNAME }}/role-radar-dataset
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install huggingface-cli
+        run: pip install huggingface_hub
+
+      - name: Export ONNX models (pre-trained, local)
+        run: |
+          # Models are exported locally before tagging.
+          # Verify they exist in data/models/onnx/
+          test -f model-training/data/models/onnx/skills_lgbm.onnx || \
+            { echo "ERROR: Run 'python3 export_onnx.py' locally before tagging"; exit 1; }
+
+      - name: Publish models
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          huggingface-cli login --token $HF_TOKEN
+          huggingface-cli repo create $HF_MODEL_REPO --type model || true
+          huggingface-cli upload $HF_MODEL_REPO \
+            model-training/data/models/onnx/ . \
+            --commit-message "$(git describe --tags)"
+          huggingface-cli upload $HF_MODEL_REPO \
+            model-training/hf-model-card.md README.md
+
+      - name: Publish dataset
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          huggingface-cli login --token $HF_TOKEN
+          huggingface-cli repo create $HF_DATASET_REPO --type dataset || true
+          cd model-training/data
+          huggingface-cli upload $HF_DATASET_REPO \
+            scraped_jobs.json synthetic_profiles.json benchmarks.json \
+            gold_labels.json phase2_pairs.json phase2_labels.json \
+            phase3_pairs.json phase3_labels.json . \
+            --commit-message "$(git describe --tags)"
+          cd ../..
+          huggingface-cli upload $HF_DATASET_REPO \
+            model-training/hf-dataset-card.md README.md

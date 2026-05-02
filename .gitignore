@@ -34,3 +34,19 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# model training — derived outputs (regenerate with train.py + export_onnx.py)
+model-training/data/models/*.pkl
+model-training/data/models/*.csv
+model-training/data/models/reranker/
+model-training/data/models/embedding_cache.pkl
+model-training/data/models/feature_names.json
+model-training/data/ats_dataset_train.json
+model-training/data/ats_reranker_pairs.json
+model-training/data/screening_dataset.json
+model-training/data/screening_reranker_pairs.json
+model-training/data/gold_candidates.json
+model-training/data/gold_pair_ids.json
+model-training/data/gold_pairs_full.json
+model-training/pipeline/venv/
+model-training/pipeline/__pycache__/

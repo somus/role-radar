@@ -1,0 +1,1675 @@
+[
+  {
+    "pair_id": "13_linkedin_4392811970",
+    "skills": 98,
+    "seniority": 95,
+    "domain": 90,
+    "location": 97,
+    "composite": 96,
+    "overqualified": false,
+    "reasoning": "Sr Backend (TS/Node/PG/GraphQL) \u00d7 Fullstack @PwC. All skills match. Senior 8yr fits Mid-Senior. Bangalore."
+  },
+  {
+    "pair_id": "55_linkedin_4392811970",
+    "skills": 98,
+    "seniority": 85,
+    "domain": 90,
+    "location": 97,
+    "composite": 95,
+    "overqualified": false,
+    "reasoning": "Mid Fullstack (TS/React/Node/PG) \u00d7 Fullstack @PwC. All match. Mid 4yr fits. Bangalore."
+  },
+  {
+    "pair_id": "21_linkedin_4398109498",
+    "skills": 97,
+    "seniority": 78,
+    "domain": 72,
+    "location": 97,
+    "composite": 92,
+    "overqualified": true,
+    "reasoning": "Staff Backend (Java/Spring/PG/Kafka) \u00d7 Fullstack @Emkay. All match. Mumbai."
+  },
+  {
+    "pair_id": "21_linkedin_4139842127",
+    "skills": 97,
+    "seniority": 95,
+    "domain": 72,
+    "location": 97,
+    "composite": 94,
+    "overqualified": false,
+    "reasoning": "Staff Backend Arch (Java/Spring/PG/Kafka) \u00d7 SDE @Expound. 8 overlap. Mumbai."
+  },
+  {
+    "pair_id": "62_linkedin_4392811970",
+    "skills": 98,
+    "seniority": 95,
+    "domain": 72,
+    "location": 97,
+    "composite": 95,
+    "overqualified": false,
+    "reasoning": "Sr Product Eng (React/Node/GraphQL/PG) \u00d7 Fullstack @PwC. All match. Bangalore."
+  },
+  {
+    "pair_id": "18_linkedin_4392811970",
+    "skills": 98,
+    "seniority": 95,
+    "domain": 90,
+    "location": 97,
+    "composite": 96,
+    "overqualified": false,
+    "reasoning": "Sr Backend (TS/Node/PG/GraphQL) \u00d7 Fullstack @PwC. 9 overlap. Bangalore."
+  },
+  {
+    "pair_id": "45_linkedin_4259091971",
+    "skills": 96,
+    "seniority": 95,
+    "domain": 62,
+    "location": 97,
+    "composite": 93,
+    "overqualified": false,
+    "reasoning": "Staff Frontend (React/TS/Next) \u00d7 SE @Alterest. React ecosystem. Bangalore."
+  },
+  {
+    "pair_id": "7_linkedin_4398675342",
+    "skills": 95,
+    "seniority": 85,
+    "domain": 90,
+    "location": 97,
+    "composite": 94,
+    "overqualified": false,
+    "reasoning": "Mid Backend (TS/Node/PG/GraphQL) \u00d7 Fullstack @Deloitte. 7 overlap. Bangalore."
+  },
+  {
+    "pair_id": "18_linkedin_4383134067",
+    "skills": 96,
+    "seniority": 95,
+    "domain": 90,
+    "location": 97,
+    "composite": 96,
+    "overqualified": false,
+    "reasoning": "Sr Backend (TS/Node/PG/GraphQL) \u00d7 SE @Deltek. 7 overlap. Bangalore."
+  },
+  {
+    "pair_id": "25_linkedin_4379080898",
+    "skills": 95,
+    "seniority": 95,
+    "domain": 72,
+    "location": 97,
+    "composite": 93,
+    "overqualified": false,
+    "reasoning": "Jr Frontend (React/JS/CSS) \u00d7 Frontend @Jero. React+JS match. Bangalore."
+  },
+  {
+    "pair_id": "110_linkedin_4364302087",
+    "skills": 98,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 87,
+    "overqualified": false,
+    "reasoning": "Sr Platform (K8s/Terraform/GCP/Docker) \u00d7 DevOps GCP @Particle41. All skills. Remote \u00d7 Pune."
+  },
+  {
+    "pair_id": "84_linkedin_4388479235",
+    "skills": 97,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 87,
+    "overqualified": false,
+    "reasoning": "Mid Data Eng (Python/Spark/Kafka) \u00d7 Data Eng PySpark @Virtusa. All match. Remote \u00d7 Chennai."
+  },
+  {
+    "pair_id": "93_linkedin_4388462776",
+    "skills": 97,
+    "seniority": 78,
+    "domain": 72,
+    "location": 68,
+    "composite": 84,
+    "overqualified": true,
+    "reasoning": "Staff Data Arch (Python/Spark/Kafka) \u00d7 Data Eng @Virtusa. 9 overlap. Remote \u00d7 Chennai."
+  },
+  {
+    "pair_id": "118_linkedin_4397994905",
+    "skills": 98,
+    "seniority": 95,
+    "domain": 62,
+    "location": 68,
+    "composite": 86,
+    "overqualified": false,
+    "reasoning": "Staff DevOps (K8s/Docker/AWS/Terraform) \u00d7 DevOps @Barclays. All match. Bangalore \u00d7 Pune."
+  },
+  {
+    "pair_id": "107_linkedin_4409007067",
+    "skills": 97,
+    "seniority": 85,
+    "domain": 72,
+    "location": 68,
+    "composite": 85,
+    "overqualified": false,
+    "reasoning": "Mid Cloud Eng (AWS/Docker/Terraform/K8s) \u00d7 DevOps @Accelya. All match. Hyderabad \u00d7 Pune."
+  },
+  {
+    "pair_id": "8_linkedin_4330438339",
+    "skills": 98,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 87,
+    "overqualified": false,
+    "reasoning": "Mid Backend (Java/Spring/PG/Kafka) \u00d7 Java Dev @PIPRA. All match. Mumbai \u00d7 Hyderabad."
+  },
+  {
+    "pair_id": "138_linkedin_4399214810",
+    "skills": 95,
+    "seniority": 88,
+    "domain": 72,
+    "location": 68,
+    "composite": 85,
+    "overqualified": false,
+    "reasoning": "Sr Android (Kotlin/Jetpack) \u00d7 Android @Weekday. Core match. Bangalore \u00d7 Mumbai."
+  },
+  {
+    "pair_id": "180_linkedin_4234624922",
+    "skills": 93,
+    "seniority": 95,
+    "domain": 62,
+    "location": 68,
+    "composite": 84,
+    "overqualified": false,
+    "reasoning": "Mid Marketing (Digital/Ads/SEO) \u00d7 Marketing Trainer. All match. Bangalore \u00d7 Mumbai."
+  },
+  {
+    "pair_id": "70_linkedin_4374745665",
+    "skills": 93,
+    "seniority": 78,
+    "domain": 72,
+    "location": 68,
+    "composite": 82,
+    "overqualified": true,
+    "reasoning": "Staff Fullstack (Python/React/Django) \u00d7 Fullstack @1Kosmos. Bangalore \u00d7 Mumbai."
+  },
+  {
+    "pair_id": "47_linkedin_4388465577",
+    "skills": 88,
+    "seniority": 78,
+    "domain": 90,
+    "location": 68,
+    "composite": 82,
+    "overqualified": true,
+    "reasoning": "Staff Frontend (React/TS/GraphQL) \u00d7 Angular @Virtusa. Adjacent. Remote \u00d7 Chennai."
+  },
+  {
+    "pair_id": "87_linkedin_4370337080",
+    "skills": 80,
+    "seniority": 95,
+    "domain": 72,
+    "location": 97,
+    "composite": 86,
+    "overqualified": false,
+    "reasoning": "Sr Data Eng \u00d7 Data Analyst @RiskInsight. SQL/Python overlap. Bangalore matches."
+  },
+  {
+    "pair_id": "95_linkedin_4393458442",
+    "skills": 78,
+    "seniority": 88,
+    "domain": 72,
+    "location": 97,
+    "composite": 84,
+    "overqualified": false,
+    "reasoning": "Staff ML Eng \u00d7 Data Analytics @PwC. Python+Airflow overlap. Bangalore."
+  },
+  {
+    "pair_id": "144_linkedin_4399214810",
+    "skills": 88,
+    "seniority": 78,
+    "domain": 62,
+    "location": 68,
+    "composite": 79,
+    "overqualified": true,
+    "reasoning": "Staff Mobile (Swift/Kotlin/RN) \u00d7 Android @Weekday. Kotlin. Pune \u00d7 Mumbai."
+  },
+  {
+    "pair_id": "22_linkedin_4335515701",
+    "skills": 95,
+    "seniority": 95,
+    "domain": 72,
+    "location": 60,
+    "composite": 84,
+    "overqualified": false,
+    "reasoning": "Staff Backend (Python/Django/PG) \u00d7 Fullstack AI @Titan. Bangalore \u00d7 US = intl."
+  },
+  {
+    "pair_id": "147_linkedin_4396958592",
+    "skills": 78,
+    "seniority": 85,
+    "domain": 72,
+    "location": 68,
+    "composite": 76,
+    "overqualified": false,
+    "reasoning": "Jr PM \u00d7 Program Manager @ADP. PM/program adjacent. Delhi \u00d7 Hyderabad."
+  },
+  {
+    "pair_id": "16_linkedin_4299780194",
+    "skills": 82,
+    "seniority": 85,
+    "domain": 72,
+    "location": 60,
+    "composite": 76,
+    "overqualified": false,
+    "reasoning": "Sr API Arch (Python/Django/PG) \u00d7 Lead Backend @Agoda. Bangalore \u00d7 Bangkok."
+  },
+  {
+    "pair_id": "15_linkedin_4374661990",
+    "skills": 72,
+    "seniority": 88,
+    "domain": 72,
+    "location": 68,
+    "composite": 73,
+    "overqualified": false,
+    "reasoning": "Sr Backend (Go/K8s) \u00d7 Java Backend @NextWave. Language switch. Remote \u00d7 Pune."
+  },
+  {
+    "pair_id": "13_linkedin_4406935840",
+    "skills": 72,
+    "seniority": 95,
+    "domain": 90,
+    "location": 68,
+    "composite": 76,
+    "overqualified": false,
+    "reasoning": "Sr Backend (TS/Node) \u00d7 SysAdmin DevOps. Docker/K8s overlap. Bangalore \u00d7 Pune."
+  },
+  {
+    "pair_id": "147_linkedin_4401019767",
+    "skills": 78,
+    "seniority": 62,
+    "domain": 72,
+    "location": 68,
+    "composite": 72,
+    "overqualified": false,
+    "reasoning": "Jr PM \u00d7 Senior PM @CircleDV. PM match but seniority gap. Delhi \u00d7 Chennai."
+  },
+  {
+    "pair_id": "70_linkedin_4248972605",
+    "skills": 68,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 72,
+    "overqualified": false,
+    "reasoning": "Staff Fullstack (Python/Django) \u00d7 .NET @UPS. Different stack. Bangalore \u00d7 Chennai."
+  },
+  {
+    "pair_id": "138_linkedin_4405086882",
+    "skills": 88,
+    "seniority": 88,
+    "domain": 72,
+    "location": 60,
+    "composite": 79,
+    "overqualified": false,
+    "reasoning": "Sr Android (Kotlin/Jetpack) \u00d7 Mobile Eng @Xponential. Bangalore \u00d7 Bangkok."
+  },
+  {
+    "pair_id": "37_linkedin_4291895929",
+    "skills": 95,
+    "seniority": 95,
+    "domain": 90,
+    "location": 60,
+    "composite": 86,
+    "overqualified": false,
+    "reasoning": "Sr Frontend (React/TS/GraphQL) \u00d7 Fullstack @TeaCode. Bangalore \u00d7 Bulgaria."
+  },
+  {
+    "pair_id": "53_linkedin_4234772391",
+    "skills": 65,
+    "seniority": 95,
+    "domain": 62,
+    "location": 68,
+    "composite": 70,
+    "overqualified": false,
+    "reasoning": "Jr Fullstack (Vue/PHP) \u00d7 Frontend @SFJ. JS transferable. Goa \u00d7 Bangalore."
+  },
+  {
+    "pair_id": "136_linkedin_4408265376",
+    "skills": 62,
+    "seniority": 88,
+    "domain": 62,
+    "location": 60,
+    "composite": 65,
+    "overqualified": false,
+    "reasoning": "Sr iOS \u00d7 Android @Gentis. Wrong platform. Pune \u00d7 Cincinnati."
+  },
+  {
+    "pair_id": "1_linkedin_4394756749",
+    "skills": 62,
+    "seniority": 72,
+    "domain": 72,
+    "location": 68,
+    "composite": 66,
+    "overqualified": false,
+    "reasoning": "Jr Backend (Python) \u00d7 Java Dev. Wrong language. Bangalore \u00d7 Hyderabad."
+  },
+  {
+    "pair_id": "103_linkedin_4387781831",
+    "skills": 58,
+    "seniority": 95,
+    "domain": 72,
+    "location": 60,
+    "composite": 65,
+    "overqualified": false,
+    "reasoning": "Mid DevOps \u00d7 Jr Fullstack @3form. Wrong stack. Bangalore \u00d7 Utah."
+  },
+  {
+    "pair_id": "198_linkedin_4380120870",
+    "skills": 55,
+    "seniority": 95,
+    "domain": 90,
+    "location": 68,
+    "composite": 68,
+    "overqualified": false,
+    "reasoning": "Staff CS Director \u00d7 Cloud Eng. Skill mismatch. Bangalore \u00d7 Pune."
+  },
+  {
+    "pair_id": "4_linkedin_4397629654",
+    "skills": 55,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 66,
+    "overqualified": false,
+    "reasoning": "Jr Backend (Go) \u00d7 Frontend Vue @Delibo. Wrong stack. Mumbai \u00d7 Chennai."
+  },
+  {
+    "pair_id": "83_linkedin_4396583838",
+    "skills": 52,
+    "seniority": 95,
+    "domain": 62,
+    "location": 97,
+    "composite": 71,
+    "overqualified": false,
+    "reasoning": "Mid Data Scientist \u00d7 Retail EMI @Bajaj. ML vs sales. Hyderabad matches."
+  },
+  {
+    "pair_id": "174_linkedin_4407826462",
+    "skills": 55,
+    "seniority": 62,
+    "domain": 72,
+    "location": 68,
+    "composite": 61,
+    "overqualified": false,
+    "reasoning": "Jr CS Associate \u00d7 Associate Director TA. Different function."
+  },
+  {
+    "pair_id": "159_linkedin_4339486191",
+    "skills": 52,
+    "seniority": 78,
+    "domain": 72,
+    "location": 68,
+    "composite": 62,
+    "overqualified": true,
+    "reasoning": "Sr Program Mgr \u00d7 SDE1 Android. Complete mismatch. Overqualified."
+  },
+  {
+    "pair_id": "170_linkedin_4393458442",
+    "skills": 52,
+    "seniority": 72,
+    "domain": 72,
+    "location": 68,
+    "composite": 61,
+    "overqualified": false,
+    "reasoning": "Jr HR \u00d7 Data Analytics Eng @PwC. No data skills."
+  },
+  {
+    "pair_id": "197_linkedin_4405026156",
+    "skills": 52,
+    "seniority": 88,
+    "domain": 72,
+    "location": 68,
+    "composite": 63,
+    "overqualified": false,
+    "reasoning": "Staff Ops VP \u00d7 Social Media Mgr. Total mismatch."
+  },
+  {
+    "pair_id": "131_linkedin_4402929948",
+    "skills": 52,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 64,
+    "overqualified": false,
+    "reasoning": "iOS Developer \u00d7 DevOps Engineer. Completely different discipline."
+  },
+  {
+    "pair_id": "101_linkedin_4399214810",
+    "skills": 52,
+    "seniority": 85,
+    "domain": 72,
+    "location": 68,
+    "composite": 63,
+    "overqualified": false,
+    "reasoning": "Jr DevOps \u00d7 Android Dev. Total stack mismatch."
+  },
+  {
+    "pair_id": "141_linkedin_4395254314",
+    "skills": 52,
+    "seniority": 65,
+    "domain": 62,
+    "location": 68,
+    "composite": 59,
+    "overqualified": true,
+    "reasoning": "Staff Android \u00d7 DevOps @Wipro. Skills don't transfer."
+  },
+  {
+    "pair_id": "196_linkedin_4196613050",
+    "skills": 52,
+    "seniority": 65,
+    "domain": 72,
+    "location": 60,
+    "composite": 58,
+    "overqualified": true,
+    "reasoning": "Staff Marketing Dir \u00d7 Car Sales @Kerry Toyota. Massively overqualified. Intl."
+  },
+  {
+    "pair_id": "194_linkedin_4402178105",
+    "skills": 52,
+    "seniority": 88,
+    "domain": 90,
+    "location": 60,
+    "composite": 63,
+    "overqualified": false,
+    "reasoning": "Staff HR Dir \u00d7 Sr Software Dev HR @Vernovis. Zero dev skills. Mumbai \u00d7 Cincinnati."
+  },
+  {
+    "pair_id": "34_linkedin_4407156829",
+    "skills": 85,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 81,
+    "overqualified": false,
+    "matches": [
+      "Angular, TypeScript, RxJS, NgRx, SCSS",
+      "React.js, Next.js, Node.js"
+    ],
+    "gaps": [
+      "React/Next.js experience missing",
+      "Node.js experience limited"
+    ],
+    "job_family": "frontend",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "39_linkedin_4403501171",
+    "skills": 95,
+    "seniority": 95,
+    "domain": 72,
+    "location": 60,
+    "composite": 84,
+    "overqualified": false,
+    "matches": [
+      "React, TypeScript, CSS, Storybook, Jest",
+      "React.js, TypeScript"
+    ],
+    "gaps": [
+      "Focus on platform engineering and design systems"
+    ],
+    "job_family": "frontend",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "28_linkedin_4234772391",
+    "skills": 75,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 76,
+    "overqualified": false,
+    "matches": [
+      "Angular, TypeScript, RxJS, SCSS",
+      "React.js or Angular, Node.js, MongoDB"
+    ],
+    "gaps": [
+      "Limited Node.js and MongoDB experience",
+      "AI and DevOps skills missing"
+    ],
+    "job_family": "frontend",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "38_linkedin_4352604064",
+    "skills": 70,
+    "seniority": 88,
+    "domain": 90,
+    "location": 68,
+    "composite": 74,
+    "overqualified": false,
+    "matches": [
+      "React, TypeScript, D3.js, GraphQL",
+      "React.js"
+    ],
+    "gaps": [
+      "State management (Redux/Context API) not specified",
+      "TypeScript is a plus, not required"
+    ],
+    "job_family": "frontend",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "43_linkedin_4238704831",
+    "skills": 98,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 87,
+    "overqualified": false,
+    "matches": [
+      "React, TypeScript, GraphQL, Next.js, Storybook",
+      "React.js, JavaScript (ES6+), HTML5, CSS3"
+    ],
+    "gaps": [
+      "Specific build tools (Webpack, Vite) not listed",
+      "Testing frameworks not specified beyond Jest/RTL"
+    ],
+    "job_family": "frontend",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "177_linkedin_4335981820",
+    "skills": 75,
+    "seniority": 85,
+    "domain": 72,
+    "location": 68,
+    "composite": 74,
+    "overqualified": false,
+    "matches": [
+      "B2B Sales",
+      "Salesforce"
+    ],
+    "gaps": [
+      "Mortgage industry knowledge",
+      "Financial services experience"
+    ],
+    "job_family": "sales",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "169_linkedin_4015918607",
+    "skills": 60,
+    "seniority": 85,
+    "domain": 72,
+    "location": 68,
+    "composite": 67,
+    "overqualified": false,
+    "matches": [
+      "B2B Sales",
+      "CRM"
+    ],
+    "gaps": [
+      "Solution selling in industrial machinery",
+      "Technical sales experience"
+    ],
+    "job_family": "sales",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "177_linkedin_4393558603",
+    "skills": 75,
+    "seniority": 85,
+    "domain": 72,
+    "location": 68,
+    "composite": 74,
+    "overqualified": false,
+    "matches": [
+      "B2B Sales",
+      "Salesforce"
+    ],
+    "gaps": [
+      "Financial services sales experience",
+      "Credit and operations process knowledge"
+    ],
+    "job_family": "sales",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "177_linkedin_4387332380",
+    "skills": 85,
+    "seniority": 85,
+    "domain": 72,
+    "location": 68,
+    "composite": 79,
+    "overqualified": false,
+    "matches": [
+      "Sales leadership",
+      "Sales strategy"
+    ],
+    "gaps": [
+      "Staffing and recruiting industry experience",
+      "Sales operations transformation"
+    ],
+    "job_family": "sales",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "169_linkedin_4402757382",
+    "skills": 65,
+    "seniority": 72,
+    "domain": 72,
+    "location": 68,
+    "composite": 68,
+    "overqualified": false,
+    "matches": [
+      "Lead generation",
+      "Channel partner management"
+    ],
+    "gaps": [
+      "Luxury real estate experience",
+      "High-ticket transaction experience"
+    ],
+    "job_family": "sales",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "183_linkedin_4358974463",
+    "skills": 85,
+    "seniority": 72,
+    "domain": 72,
+    "location": 68,
+    "composite": 78,
+    "overqualified": false,
+    "matches": [
+      "HR Tech",
+      "Talent Acquisition"
+    ],
+    "gaps": [
+      "People Operations at scale",
+      "Global workforce support"
+    ],
+    "job_family": "hr",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "186_linkedin_4393065011",
+    "skills": 95,
+    "seniority": 95,
+    "domain": 72,
+    "location": 60,
+    "composite": 84,
+    "overqualified": false,
+    "matches": [
+      "HR Tech",
+      "Senior HRBP"
+    ],
+    "gaps": [
+      "Manufacturing industry domain",
+      "US-based manufacturing HR"
+    ],
+    "job_family": "hr",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "170_linkedin_4401304707",
+    "skills": 75,
+    "seniority": 72,
+    "domain": 62,
+    "location": 60,
+    "composite": 70,
+    "overqualified": false,
+    "matches": [
+      "Talent Acquisition",
+      "HR Tech"
+    ],
+    "gaps": [
+      "Senior Manager level leadership",
+      "Manufacturing TA strategy"
+    ],
+    "job_family": "hr",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "178_linkedin_4358974463",
+    "skills": 90,
+    "seniority": 72,
+    "domain": 72,
+    "location": 68,
+    "composite": 80,
+    "overqualified": false,
+    "matches": [
+      "HR Tech",
+      "Strategic HR"
+    ],
+    "gaps": [
+      "Global Shared Services leadership",
+      "Building teams from scratch"
+    ],
+    "job_family": "hr",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "170_linkedin_4402788510",
+    "skills": 75,
+    "seniority": 72,
+    "domain": 62,
+    "location": 60,
+    "composite": 70,
+    "overqualified": false,
+    "matches": [
+      "Talent Acquisition",
+      "HR Tech"
+    ],
+    "gaps": [
+      "Senior Manager level leadership",
+      "Manufacturing TA strategy"
+    ],
+    "job_family": "hr",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "147_linkedin_4380358954",
+    "skills": 65,
+    "seniority": 95,
+    "domain": 62,
+    "location": 60,
+    "composite": 68,
+    "overqualified": false,
+    "matches": [
+      "Product Management",
+      "Analytics"
+    ],
+    "gaps": [
+      "Technical Support",
+      "Sales Strategy"
+    ],
+    "job_family": "product",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "150_linkedin_4379617586",
+    "skills": 75,
+    "seniority": 85,
+    "domain": 62,
+    "location": 68,
+    "composite": 73,
+    "overqualified": false,
+    "matches": [
+      "Project Management",
+      "Risk Management"
+    ],
+    "gaps": [
+      "Medical Equipment Industry Knowledge",
+      "Software Development Lifecycle"
+    ],
+    "job_family": "product",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "155_linkedin_4380358954",
+    "skills": 65,
+    "seniority": 95,
+    "domain": 62,
+    "location": 60,
+    "composite": 68,
+    "overqualified": false,
+    "matches": [
+      "Product Management",
+      "Analytics"
+    ],
+    "gaps": [
+      "Technical Support",
+      "Sales Strategy"
+    ],
+    "job_family": "product",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "163_linkedin_4404963007",
+    "skills": 80,
+    "seniority": 95,
+    "domain": 90,
+    "location": 68,
+    "composite": 80,
+    "overqualified": false,
+    "matches": [
+      "Product Strategy",
+      "A/B Testing"
+    ],
+    "gaps": [
+      "Internal Platforms",
+      "Private Cloud"
+    ],
+    "job_family": "product",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "196_linkedin_4400141969",
+    "skills": 70,
+    "seniority": 78,
+    "domain": 72,
+    "location": 68,
+    "composite": 71,
+    "overqualified": true,
+    "matches": [
+      "Growth Strategy",
+      "Analytics"
+    ],
+    "gaps": [
+      "Social Media Specifics",
+      "Automotive Industry"
+    ],
+    "job_family": "marketing",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "188_linkedin_4402899599",
+    "skills": 88,
+    "seniority": 95,
+    "domain": 90,
+    "location": 97,
+    "composite": 92,
+    "overqualified": false,
+    "matches": [
+      "Digital Marketing",
+      "Performance Marketing"
+    ],
+    "gaps": [
+      "Q-com growth ownership",
+      "On-app campaign optimization"
+    ],
+    "job_family": "marketing",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "196_linkedin_4407864400",
+    "skills": 95,
+    "seniority": 78,
+    "domain": 90,
+    "location": 68,
+    "composite": 85,
+    "overqualified": true,
+    "matches": [
+      "Meta Ads",
+      "Google Ads"
+    ],
+    "gaps": [
+      "Seniority match",
+      "Industry alignment"
+    ],
+    "job_family": "marketing",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "188_linkedin_4320363437",
+    "skills": 80,
+    "seniority": 95,
+    "domain": 90,
+    "location": 97,
+    "composite": 88,
+    "overqualified": false,
+    "matches": [
+      "Brand Activation",
+      "Consumer engagement programs"
+    ],
+    "gaps": [
+      "Digital marketing focus",
+      "Performance marketing optimization"
+    ],
+    "job_family": "marketing",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "195_linkedin_4406384491",
+    "skills": 60,
+    "seniority": 78,
+    "domain": 62,
+    "location": 68,
+    "composite": 65,
+    "overqualified": true,
+    "matches": [
+      "Budgeting",
+      "Forecasting"
+    ],
+    "gaps": [
+      "Cost management expertise",
+      "Real estate domain knowledge"
+    ],
+    "job_family": "finance",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "195_linkedin_4380440857",
+    "skills": 95,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 86,
+    "overqualified": false,
+    "matches": [
+      "Financial Modeling",
+      "FP&A"
+    ],
+    "gaps": [
+      "India-specific financial partnership",
+      "Local compliance"
+    ],
+    "job_family": "finance",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "171_linkedin_4360652943",
+    "skills": 55,
+    "seniority": 85,
+    "domain": 72,
+    "location": 68,
+    "composite": 64,
+    "overqualified": false,
+    "matches": [
+      "Financial Modeling",
+      "Budgeting"
+    ],
+    "gaps": [
+      "Sales Management",
+      "Channel Partner Management"
+    ],
+    "job_family": "finance",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "179_linkedin_4380440857",
+    "skills": 85,
+    "seniority": 72,
+    "domain": 72,
+    "location": 68,
+    "composite": 78,
+    "overqualified": false,
+    "matches": [
+      "Financial Modeling",
+      "Budgeting"
+    ],
+    "gaps": [
+      "Biotechnology Industry Acumen",
+      "Global CFO Interaction"
+    ],
+    "job_family": "finance",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "182_linkedin_4387283659",
+    "skills": 90,
+    "seniority": 95,
+    "domain": 90,
+    "location": 68,
+    "composite": 85,
+    "overqualified": false,
+    "matches": [
+      "Customer Onboarding",
+      "Gainsight"
+    ],
+    "gaps": [
+      "AI-powered CX Assurance",
+      "Voice/Digital Channel Testing"
+    ],
+    "job_family": "customer_success",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "174_linkedin_4387283659",
+    "skills": 75,
+    "seniority": 85,
+    "domain": 90,
+    "location": 68,
+    "composite": 76,
+    "overqualified": false,
+    "matches": [
+      "Customer Onboarding",
+      "CRM"
+    ],
+    "gaps": [
+      "AI-powered CX Assurance",
+      "Advanced SaaS Metrics"
+    ],
+    "job_family": "customer_success",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "190_linkedin_4387283659",
+    "skills": 88,
+    "seniority": 88,
+    "domain": 90,
+    "location": 68,
+    "composite": 83,
+    "overqualified": false,
+    "matches": [
+      "Customer Strategy",
+      "Gainsight"
+    ],
+    "gaps": [
+      "AI-powered CX Assurance",
+      "Platform-specific Testing"
+    ],
+    "job_family": "customer_success",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "21_job_20",
+    "skills": 92,
+    "seniority": 88,
+    "domain": 62,
+    "location": 97,
+    "composite": 90,
+    "overqualified": false,
+    "matches": [
+      "Java",
+      "Spring Boot"
+    ],
+    "gaps": [
+      "React",
+      "Node.js"
+    ],
+    "job_family": "backend",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "5_linkedin_4251737970",
+    "skills": 55,
+    "seniority": 62,
+    "domain": 72,
+    "location": 97,
+    "composite": 68,
+    "overqualified": false,
+    "matches": [
+      "PostgreSQL"
+    ],
+    "gaps": [
+      "Java",
+      "Spring Boot"
+    ],
+    "job_family": "backend",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "14_linkedin_4278819862",
+    "skills": 95,
+    "seniority": 88,
+    "domain": 72,
+    "location": 97,
+    "composite": 92,
+    "overqualified": false,
+    "matches": [
+      "Java",
+      "Spring Boot"
+    ],
+    "gaps": [
+      "Kubernetes"
+    ],
+    "job_family": "backend",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "87_linkedin_4406833892",
+    "skills": 70,
+    "seniority": 95,
+    "domain": 72,
+    "location": 97,
+    "composite": 81,
+    "overqualified": false,
+    "matches": [
+      "Python",
+      "Kafka"
+    ],
+    "gaps": [
+      "React",
+      "Node.js"
+    ],
+    "job_family": "data",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "96_linkedin_4401460038",
+    "skills": 50,
+    "seniority": 88,
+    "domain": 62,
+    "location": 97,
+    "composite": 69,
+    "overqualified": false,
+    "matches": [
+      "Python",
+      "Airflow"
+    ],
+    "gaps": [
+      "React",
+      "Node.js"
+    ],
+    "job_family": "data",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "86_linkedin_4406833892",
+    "skills": 75,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 76,
+    "overqualified": false,
+    "matches": [
+      "Python",
+      "PyTorch"
+    ],
+    "gaps": [
+      "Software Engineering fundamentals",
+      "Data Science concepts"
+    ],
+    "job_family": "data",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "184_linkedin_4373091275",
+    "skills": 60,
+    "seniority": 95,
+    "domain": 62,
+    "location": 68,
+    "composite": 67,
+    "overqualified": false,
+    "matches": [
+      "Process Optimization",
+      "Vendor Management"
+    ],
+    "gaps": [
+      "Financial product sales",
+      "Gold loan appraisal"
+    ],
+    "job_family": "operations",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "192_linkedin_4394456781",
+    "skills": 68,
+    "seniority": 88,
+    "domain": 62,
+    "location": 68,
+    "composite": 70,
+    "overqualified": false,
+    "matches": [
+      "Process Optimization",
+      "Six Sigma"
+    ],
+    "gaps": [
+      "BMS/IBMS systems",
+      "ELV systems"
+    ],
+    "job_family": "operations",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "181_linkedin_4373091275",
+    "skills": 60,
+    "seniority": 95,
+    "domain": 62,
+    "location": 68,
+    "composite": 67,
+    "overqualified": false,
+    "matches": [
+      "Process Optimization",
+      "Vendor Management"
+    ],
+    "gaps": [
+      "Financial product sales",
+      "Gold loan appraisal"
+    ],
+    "job_family": "operations",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "126_linkedin_4399214810",
+    "skills": 92,
+    "seniority": 85,
+    "domain": 62,
+    "location": 68,
+    "composite": 82,
+    "overqualified": false,
+    "matches": [
+      "Kotlin",
+      "Jetpack Compose"
+    ],
+    "gaps": [
+      "SDK development",
+      "DSA"
+    ],
+    "job_family": "mobile",
+    "strategy": "same_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "146_linkedin_4399214810",
+    "skills": 52,
+    "seniority": 85,
+    "domain": 72,
+    "location": 97,
+    "composite": 70,
+    "overqualified": false,
+    "matches": [
+      "Agile",
+      "Jira"
+    ],
+    "gaps": [
+      "Kotlin",
+      "Android SDK"
+    ],
+    "job_family": "mobile",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "166_linkedin_4373091275",
+    "skills": 55,
+    "seniority": 78,
+    "domain": 72,
+    "location": 68,
+    "composite": 63,
+    "overqualified": true,
+    "matches": [
+      "Analytics"
+    ],
+    "gaps": [
+      "Branch Operations",
+      "Financial Products"
+    ],
+    "job_family": "operations",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "111_job_14",
+    "skills": 50,
+    "seniority": 95,
+    "domain": 62,
+    "location": 60,
+    "composite": 60,
+    "overqualified": false,
+    "matches": [
+      "Python"
+    ],
+    "gaps": [
+      "Embedded C++",
+      "RTOS"
+    ],
+    "job_family": "systems",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "130_linkedin_4393928942",
+    "skills": 78,
+    "seniority": 85,
+    "domain": 62,
+    "location": 60,
+    "composite": 73,
+    "overqualified": false,
+    "matches": [
+      "REST",
+      "CI/CD"
+    ],
+    "gaps": [
+      "Shopify",
+      "React"
+    ],
+    "job_family": "frontend",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "92_linkedin_4387283659",
+    "skills": 58,
+    "seniority": 78,
+    "domain": 72,
+    "location": 68,
+    "composite": 65,
+    "overqualified": true,
+    "matches": [
+      "Python",
+      "Kubernetes"
+    ],
+    "gaps": [
+      "Customer Success Management",
+      "CX Assurance"
+    ],
+    "job_family": "customer_success",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "2_linkedin_4360662878",
+    "skills": 55,
+    "seniority": 85,
+    "domain": 62,
+    "location": 97,
+    "composite": 71,
+    "overqualified": false,
+    "matches": [
+      "Java",
+      "Spring Boot"
+    ],
+    "gaps": [
+      "Salesforce",
+      "CRM"
+    ],
+    "job_family": "operations",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "149_linkedin_4398861071",
+    "skills": 85,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 81,
+    "overqualified": false,
+    "matches": [
+      "SQL",
+      "Amplitude"
+    ],
+    "gaps": [
+      "Search specific analytics",
+      "Ranking algorithms"
+    ],
+    "job_family": "data",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "187_linkedin_4330008476",
+    "skills": 50,
+    "seniority": 88,
+    "domain": 72,
+    "location": 60,
+    "composite": 60,
+    "overqualified": false,
+    "matches": [
+      "SAP"
+    ],
+    "gaps": [
+      "iOS",
+      "Android Development"
+    ],
+    "job_family": "mobile",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "188_linkedin_4392846158",
+    "skills": 65,
+    "seniority": 85,
+    "domain": 72,
+    "location": 68,
+    "composite": 69,
+    "overqualified": false,
+    "matches": [
+      "Google Ads"
+    ],
+    "gaps": [
+      "3PL",
+      "Warehousing"
+    ],
+    "job_family": "sales",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "144_linkedin_4299774251",
+    "skills": 75,
+    "seniority": 95,
+    "domain": 62,
+    "location": 97,
+    "composite": 82,
+    "overqualified": false,
+    "matches": [
+      "Node.js",
+      "GraphQL"
+    ],
+    "gaps": [
+      "Fintech",
+      "Payments"
+    ],
+    "job_family": "backend",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "178_linkedin_4360652943",
+    "skills": 55,
+    "seniority": 95,
+    "domain": 62,
+    "location": 68,
+    "composite": 65,
+    "overqualified": false,
+    "matches": [
+      "HRIS",
+      "Workday"
+    ],
+    "gaps": [
+      "Sales skills",
+      "Financial services domain knowledge"
+    ],
+    "job_family": "finance",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "5_linkedin_4407384117",
+    "skills": 60,
+    "seniority": 95,
+    "domain": 72,
+    "location": 97,
+    "composite": 76,
+    "overqualified": false,
+    "matches": [
+      "Node.js",
+      "PostgreSQL"
+    ],
+    "gaps": [
+      "Test automation",
+      "QA strategy"
+    ],
+    "job_family": "fullstack",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "163_linkedin_4406711268",
+    "skills": 55,
+    "seniority": 88,
+    "domain": 62,
+    "location": 60,
+    "composite": 62,
+    "overqualified": false,
+    "matches": [
+      "Product Strategy",
+      "Analytics"
+    ],
+    "gaps": [
+      "HR processes",
+      "Talent development"
+    ],
+    "job_family": "hr",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "169_linkedin_4387283659",
+    "skills": 78,
+    "seniority": 85,
+    "domain": 90,
+    "location": 68,
+    "composite": 78,
+    "overqualified": false,
+    "matches": [
+      "CRM",
+      "Salesforce"
+    ],
+    "gaps": [
+      "Customer retention",
+      "Onboarding"
+    ],
+    "job_family": "customer_success",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "178_linkedin_4324917907",
+    "skills": 55,
+    "seniority": 95,
+    "domain": 72,
+    "location": 60,
+    "composite": 64,
+    "overqualified": false,
+    "matches": [
+      "HRIS",
+      "Employee Relations"
+    ],
+    "gaps": [
+      "Backend development",
+      "Web3 concepts"
+    ],
+    "job_family": "fullstack",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "141_linkedin_4398772971",
+    "skills": 55,
+    "seniority": 95,
+    "domain": 62,
+    "location": 68,
+    "composite": 65,
+    "overqualified": false,
+    "matches": [
+      "Kotlin",
+      "Jetpack Compose"
+    ],
+    "gaps": [
+      "Apache Flink",
+      "Java Spring Boot"
+    ],
+    "job_family": "backend",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "177_linkedin_4387283659",
+    "skills": 60,
+    "seniority": 95,
+    "domain": 90,
+    "location": 68,
+    "composite": 70,
+    "overqualified": false,
+    "matches": [
+      "Salesforce",
+      "CRM"
+    ],
+    "gaps": [
+      "Customer Success Management",
+      "Cyara platform"
+    ],
+    "job_family": "customer_success",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "133_linkedin_4390723563",
+    "skills": 50,
+    "seniority": 95,
+    "domain": 72,
+    "location": 97,
+    "composite": 71,
+    "overqualified": false,
+    "matches": [
+      "Swift",
+      "Combine"
+    ],
+    "gaps": [
+      "Brand Communication",
+      "Content Creation"
+    ],
+    "job_family": "marketing",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "182_linkedin_4339855966",
+    "skills": 55,
+    "seniority": 95,
+    "domain": 90,
+    "location": 97,
+    "composite": 75,
+    "overqualified": false,
+    "matches": [
+      "SaaS Metrics",
+      "Customer Onboarding"
+    ],
+    "gaps": [
+      "React",
+      "TypeScript"
+    ],
+    "job_family": "frontend",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  },
+  {
+    "pair_id": "105_linkedin_4396583838",
+    "skills": 55,
+    "seniority": 95,
+    "domain": 72,
+    "location": 68,
+    "composite": 66,
+    "overqualified": false,
+    "matches": [
+      "AWS",
+      "Python"
+    ],
+    "gaps": [
+      "Retail Sales",
+      "Channel Partner Management"
+    ],
+    "job_family": "operations",
+    "strategy": "cross_family",
+    "review_status": "pending"
+  }
+]
