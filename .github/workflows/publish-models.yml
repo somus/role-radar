@@ -17,8 +17,8 @@ jobs:
         with:
           lfs: true
 
-      - name: Install huggingface-cli
-        run: pip install huggingface_hub
+      - name: Install HuggingFace CLI
+        run: pip install "huggingface_hub[cli]"
 
       - name: Export ONNX models (pre-trained, local)
         run: |
@@ -31,26 +31,26 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          huggingface-cli login --token $HF_TOKEN
-          huggingface-cli repo create $HF_MODEL_REPO --type model || true
-          huggingface-cli upload $HF_MODEL_REPO \
+          hf login --token $HF_TOKEN
+          hf repo create $HF_MODEL_REPO --type model || true
+          hf upload $HF_MODEL_REPO \
             model-training/data/models/onnx/ . \
             --commit-message "$(git describe --tags)"
-          huggingface-cli upload $HF_MODEL_REPO \
+          hf upload $HF_MODEL_REPO \
             model-training/hf-model-card.md README.md
 
       - name: Publish dataset
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          huggingface-cli login --token $HF_TOKEN
-          huggingface-cli repo create $HF_DATASET_REPO --type dataset || true
+          hf login --token $HF_TOKEN
+          hf repo create $HF_DATASET_REPO --type dataset || true
           cd model-training/data
-          huggingface-cli upload $HF_DATASET_REPO \
+          hf upload $HF_DATASET_REPO \
             scraped_jobs.json synthetic_profiles.json benchmarks.json \
             gold_labels.json phase2_pairs.json phase2_labels.json \
             phase3_pairs.json phase3_labels.json . \
             --commit-message "$(git describe --tags)"
           cd ../..
-          huggingface-cli upload $HF_DATASET_REPO \
+          hf upload $HF_DATASET_REPO \
             model-training/hf-dataset-card.md README.md
