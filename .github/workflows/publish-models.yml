@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  HF_MODEL_REPO: ${{ vars.HF_USERNAME }}/role-radar-scoring
-  HF_DATASET_REPO: ${{ vars.HF_USERNAME }}/role-radar-dataset
+  HF_MODEL_REPO: ${{ vars.HF_USERNAME || github.repository_owner }}/role-radar-scoring
+  HF_DATASET_REPO: ${{ vars.HF_USERNAME || github.repository_owner }}/role-radar-dataset
 
 jobs:
   publish:
@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+          fetch-depth: 0
 
       - name: Install HuggingFace CLI
         run: pip install "huggingface_hub[cli]"
@@ -29,10 +30,11 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          hf auth login --token $HF_TOKEN --add-to-git-credential
+          hf auth login --token $HF_TOKEN
+          VERSION=$(git describe --tags 2>/dev/null || echo "latest")
           hf upload $HF_MODEL_REPO model-training/data/models/onnx/ . \
             --repo-type model \
-            --commit-message "$(git describe --tags)"
+            --commit-message "$VERSION"
           hf upload $HF_MODEL_REPO model-training/hf-model-card.md README.md \
             --repo-type model
 
@@ -40,9 +42,10 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          VERSION=$(git describe --tags 2>/dev/null || echo "latest")
           hf upload $HF_DATASET_REPO model-training/data/ . \
             --repo-type dataset \
             --include "*.json" \
-            --commit-message "$(git describe --tags)"
+            --commit-message "$VERSION"
           hf upload $HF_DATASET_REPO model-training/hf-dataset-card.md README.md \
             --repo-type dataset
