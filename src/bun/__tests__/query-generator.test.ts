@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { GeminiClient } from "../gemini-client";
 import { storeProfile, getProfile } from "../profile-store";
-import { generateSearchQueries, mapSeniorityToLinkedIn } from "../query-generator";
+import { generateSearchQueries, getStoredSearchQueries, mapSeniorityToLinkedIn } from "../query-generator";
 import type { ResumeParseResult } from "../../shared/types";
 
 const migrationsDir = join(import.meta.dir, "../../../migrations");
@@ -215,5 +215,44 @@ describe("generateSearchQueries", () => {
     await generateSearchQueries(db, updatedProfile, gemini);
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("forced regeneration replaces stored search queries", async () => {
+    storeProfile(db, parseResult, "resume text");
+    const profile = getProfile(db)!;
+
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeQueryResponse()));
+    await generateSearchQueries(db, profile, gemini);
+
+    const response = JSON.stringify({
+      queries: [
+        { keywords: ["Platform Engineer"], strategy: "precise" },
+        { keywords: ["Infrastructure Engineer"], strategy: "broad" },
+        { keywords: ["Developer Productivity"], strategy: "exploratory" },
+      ],
+    });
+    mockFetch.mockResolvedValueOnce(geminiResponse(response));
+
+    const regenerated = await generateSearchQueries(db, profile, gemini, { force: true });
+
+    expect(regenerated[0]!.keywords).toEqual(["Platform Engineer"]);
+    const rows = db.query("SELECT keywords, query_type FROM search_queries WHERE profile_id = ? ORDER BY id").all(profile.id) as any[];
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.keywords)).toEqual(["Platform Engineer", "Infrastructure Engineer", "Developer Productivity"]);
+    expect(rows.map((r) => r.query_type)).toEqual(["precise", "broad", "exploratory"]);
+  });
+
+  test("stored queries are only returned for current profile version", async () => {
+    storeProfile(db, parseResult, "resume text");
+    const profile = getProfile(db)!;
+
+    mockFetch.mockResolvedValueOnce(geminiResponse(makeQueryResponse()));
+    await generateSearchQueries(db, profile, gemini);
+    expect(getStoredSearchQueries(db, profile)).toHaveLength(3);
+
+    db.query("UPDATE profiles SET seniority = 'Staff', updated_at = datetime('now', '+1 second') WHERE id = ?").run(profile.id);
+    const updatedProfile = getProfile(db)!;
+
+    expect(getStoredSearchQueries(db, updatedProfile)).toHaveLength(0);
   });
 });

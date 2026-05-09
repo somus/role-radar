@@ -15,7 +15,6 @@ export async function extractText(pdfBytes: Uint8Array): Promise<string> {
       ocr: {
         backend: "tesseract",
         language: "eng",
-        dpi: 150,
       },
     });
 

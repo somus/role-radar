@@ -20,12 +20,14 @@ import type { Profile } from "../shared/types";
 
 type Props = {
   profile: Profile;
+  autoStartSearch?: boolean;
+  onAutoStartConsumed?: () => void;
   onEditProfile: () => void;
   onEnrichment: () => void;
   onReset: () => void;
 };
 
-export function Dashboard({ profile, onEditProfile, onEnrichment, onReset }: Props) {
+export function Dashboard({ profile, autoStartSearch, onAutoStartConsumed, onEditProfile, onEnrichment, onReset }: Props) {
   const [resetError, setResetError] = useState<string | null>(null);
   const [feedRefresh, setFeedRefresh] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
@@ -125,7 +127,12 @@ export function Dashboard({ profile, onEditProfile, onEnrichment, onReset }: Pro
           </CardContent>
         </Card>
 
-        <JobSearch profileId={profile.id} onSearchComplete={handleSearchComplete} />
+        <JobSearch
+          profileId={profile.id}
+          autoStartSearch={autoStartSearch}
+          onAutoStartConsumed={onAutoStartConsumed}
+          onSearchComplete={handleSearchComplete}
+        />
 
         <JobFeed profileId={profile.id} refreshKey={feedRefresh} hasSearched={hasSearched} />
 

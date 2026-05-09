@@ -4,6 +4,9 @@ import type { Profile, SearchQuery } from "../shared/types";
 import { GenerateQueriesResultSchema } from "../shared/types";
 import { storeSearchQuery } from "./job-store";
 
+export type QueryStrategy = "precise" | "broad" | "exploratory";
+export type GeneratedSearchQuery = SearchQuery & { strategy: QueryStrategy };
+
 const SENIORITY_TO_LINKEDIN: Record<string, string> = {
   Junior: "2",
   Mid: "3",
@@ -56,14 +59,15 @@ ${JSON.stringify(profileData, null, 2)}
 export async function generateSearchQueries(
   db: Database,
   profile: Profile,
-  gemini: GeminiClient
-): Promise<SearchQuery[]> {
-  const cached = db.query(
+  gemini: GeminiClient,
+  options: { force?: boolean } = {}
+): Promise<GeneratedSearchQuery[]> {
+  const cached = options.force ? null : db.query(
     "SELECT queries_json FROM generated_queries WHERE profile_id = ? AND profile_updated_at = ?"
   ).get(profile.id, profile.updated_at) as { queries_json: string } | null;
 
   if (cached) {
-    return JSON.parse(cached.queries_json);
+    return deserializeGeneratedQueries(cached.queries_json);
   }
 
   const prompt = buildPrompt(profile);
@@ -73,26 +77,54 @@ export async function generateSearchQueries(
   const defaultLocation = profile.preferences.locations[0] ?? undefined;
   const remoteLocation = profile.preferences.country ?? undefined;
 
-  const queries = result.queries.map((q) => {
+  const queries = result.queries.map((q): GeneratedSearchQuery => {
     const location = q.location ?? defaultLocation;
-    const searchQuery: SearchQuery = {
+    const searchQuery: GeneratedSearchQuery = {
       keywords: q.keywords,
       location,
       experienceLevel: q.experienceLevel ?? defaultLevel,
       remote: profile.preferences.remote || undefined,
       remoteLocation,
+      strategy: q.strategy,
     };
-
-    storeSearchQuery(db, profile.id, searchQuery, q.strategy);
 
     return searchQuery;
   });
 
-  db.query(
-    `INSERT INTO generated_queries (profile_id, profile_updated_at, queries_json)
-     VALUES (?, ?, ?)
-     ON CONFLICT(profile_id) DO UPDATE SET profile_updated_at = excluded.profile_updated_at, queries_json = excluded.queries_json`
-  ).run(profile.id, profile.updated_at, JSON.stringify(queries));
+  const persist = db.transaction((generated: GeneratedSearchQuery[]) => {
+    db.query("DELETE FROM search_queries WHERE profile_id = ?").run(profile.id);
+
+    for (const query of generated) {
+      storeSearchQuery(db, profile.id, query, query.strategy);
+    }
+
+    db.query(
+      `INSERT INTO generated_queries (profile_id, profile_updated_at, queries_json)
+       VALUES (?, ?, ?)
+       ON CONFLICT(profile_id) DO UPDATE SET profile_updated_at = excluded.profile_updated_at, queries_json = excluded.queries_json`
+    ).run(profile.id, profile.updated_at, JSON.stringify(generated));
+  });
+
+  persist(queries);
 
   return queries;
+}
+
+export function getStoredSearchQueries(db: Database, profile: Pick<Profile, "id" | "updated_at">): GeneratedSearchQuery[] {
+  const cached = db.query(
+    "SELECT queries_json FROM generated_queries WHERE profile_id = ? AND profile_updated_at = ?"
+  ).get(profile.id, profile.updated_at) as { queries_json: string } | null;
+
+  return cached ? deserializeGeneratedQueries(cached.queries_json) : [];
+}
+
+function deserializeGeneratedQueries(queriesJson: string): GeneratedSearchQuery[] {
+  return (JSON.parse(queriesJson) as (SearchQuery & { strategy?: string })[]).map((q) => ({
+    ...q,
+    strategy: isQueryStrategy(q.strategy) ? q.strategy : "precise",
+  }));
+}
+
+function isQueryStrategy(value: unknown): value is QueryStrategy {
+  return value === "precise" || value === "broad" || value === "exploratory";
 }

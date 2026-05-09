@@ -16,6 +16,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [enrichmentRegen, setEnrichmentRegen] = useState(false);
   const [reviewFromDashboard, setReviewFromDashboard] = useState(false);
+  const [autoStartSearch, setAutoStartSearch] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -137,10 +138,12 @@ export function App() {
         onComplete={(updated) => {
           setProfile(updated);
           setEnrichmentRegen(false);
+          setAutoStartSearch(true);
           setState("dashboard");
         }}
         onSkip={() => {
           setEnrichmentRegen(false);
+          setAutoStartSearch(true);
           setState("dashboard");
         }}
       />
@@ -157,8 +160,11 @@ export function App() {
     return (
       <Dashboard
         profile={profile}
+        autoStartSearch={autoStartSearch}
+        onAutoStartConsumed={() => setAutoStartSearch(false)}
         onEditProfile={async () => {
           try {
+            setAutoStartSearch(false);
             const text = await electrobun.rpc.request.getResumeText();
             setResumeText(text ?? "");
             setReviewFromDashboard(true);
@@ -169,10 +175,12 @@ export function App() {
           }
         }}
         onEnrichment={() => {
+          setAutoStartSearch(false);
           setEnrichmentRegen(true);
           setState("enrichment");
         }}
         onReset={() => {
+          setAutoStartSearch(false);
           setProfile(null);
           setResumeText("");
           setState("upload");

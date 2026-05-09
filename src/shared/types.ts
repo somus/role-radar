@@ -51,6 +51,7 @@ export type PipelineEvent =
   | { type: "job:search:error"; payload: { message: string } }
   | { type: "queries:generating"; payload: null }
   | { type: "queries:generated"; payload: { count: number } }
+  | { type: "queries:progress"; payload: { current: number; total: number; query: string; strategy: string } }
   | { type: "queries:search:complete"; payload: { queriesRun: number; jobsDiscovered: number } }
   | { type: "queries:error"; payload: { message: string } }
   | { type: "fetchmore:searching"; payload: null }
@@ -84,6 +85,8 @@ export type AppRPCSchema = {
       processEnrichmentAnswers: { profileId: number; answers: EnrichmentAnswer[] };
       searchJobs: SearchQuery;
       generateAndSearch: { profileId: number };
+      refreshSearch: { profileId: number };
+      regenerateQueries: { profileId: number };
       fetchMoreJobs: { profileId: number };
     };
   };
@@ -246,4 +249,3 @@ export const GeneratedQuerySchema = z.object({
 export const GenerateQueriesResultSchema = z.object({
   queries: z.array(GeneratedQuerySchema).min(3).max(5),
 });
-

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v4";
@@ -63,16 +63,20 @@ function fromTags(tags: Tag[]): string[] {
 
 type Props = {
   profileId: number;
+  autoStartSearch?: boolean;
+  onAutoStartConsumed?: () => void;
   onSearchComplete: () => void;
 };
 
-export function JobSearch({ profileId, onSearchComplete }: Props) {
+export function JobSearch({ profileId, autoStartSearch, onAutoStartConsumed, onSearchComplete }: Props) {
   const [searching, setSearching] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
   const [autoStatus, setAutoStatus] = useState<string | null>(null);
   const [result, setResult] = useState<{ total: number } | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [activeKeywordIdx, setActiveKeywordIdx] = useState<number | null>(null);
+  const [hasStoredQueries, setHasStoredQueries] = useState(false);
+  const autoStartedRef = useRef(false);
 
   const { register, handleSubmit, control, setValue, watch, formState: { errors } } = useForm<SearchFormValues>({
     resolver: zodResolver(searchFormSchema),
@@ -110,10 +114,14 @@ export function JobSearch({ profileId, onSearchComplete }: Props) {
       } else if (type === "queries:generated") {
         const { count } = payload as { count: number };
         setAutoStatus(`Generated ${count} queries, searching...`);
+      } else if (type === "queries:progress") {
+        const { current, total, query, strategy } = payload as { current: number; total: number; query: string; strategy: string };
+        setAutoStatus(`Searching ${current}/${total}: [${strategy}] ${query}`);
       } else if (type === "queries:search:complete") {
         const { queriesRun, jobsDiscovered } = payload as { queriesRun: number; jobsDiscovered: number };
         setAutoSearching(false);
         setAutoStatus(null);
+        setHasStoredQueries(queriesRun > 0);
         setResult({ total: jobsDiscovered });
         onSearchComplete();
       } else if (type === "queries:error") {
@@ -126,6 +134,16 @@ export function JobSearch({ profileId, onSearchComplete }: Props) {
     window.addEventListener("pipeline-update", handlePipeline);
     return () => window.removeEventListener("pipeline-update", handlePipeline);
   }, [onSearchComplete]);
+
+  useEffect(() => {
+    if (!autoStartSearch || autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    setSearchError(null);
+    setResult(null);
+    setAutoSearching(true);
+    onAutoStartConsumed?.();
+    electrobun.rpc.send.generateAndSearch({ profileId });
+  }, [autoStartSearch, onAutoStartConsumed, profileId]);
 
   function onSubmit(data: SearchFormValues) {
     setSearchError(null);
@@ -161,6 +179,19 @@ export function JobSearch({ profileId, onSearchComplete }: Props) {
   const [manualOpen, setManualOpen] = useState(false);
   const isBusy = searching || autoSearching;
 
+  function startGeneratedSearch(kind: "generate" | "refresh" | "regenerate") {
+    setSearchError(null);
+    setResult(null);
+    setAutoSearching(true);
+    if (kind === "refresh") {
+      electrobun.rpc.send.refreshSearch({ profileId });
+    } else if (kind === "regenerate") {
+      electrobun.rpc.send.regenerateQueries({ profileId });
+    } else {
+      electrobun.rpc.send.generateAndSearch({ profileId });
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -176,14 +207,35 @@ export function JobSearch({ profileId, onSearchComplete }: Props) {
           size="lg"
           className="w-full"
           disabled={isBusy}
-          onClick={() => {
-            setSearchError(null);
-            setResult(null);
-            electrobun.rpc.send.generateAndSearch({ profileId });
-          }}
+          onClick={() => startGeneratedSearch("generate")}
         >
-          {autoSearching ? "Finding Jobs..." : "Find Jobs"}
+          {autoSearching ? "Finding jobs..." : "Find jobs from profile"}
         </Button>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isBusy || !hasStoredQueries}
+            onClick={() => startGeneratedSearch("refresh")}
+          >
+            Search saved queries
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isBusy}
+            onClick={() => startGeneratedSearch("regenerate")}
+          >
+            Create new queries
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Search saved queries reuses existing generated queries without calling Gemini. Create new queries asks Gemini for a fresh search plan.
+        </p>
+        {!hasStoredQueries && (
+          <p className="text-xs text-muted-foreground">Saved-query search unlocks after your first profile-based search.</p>
+        )}
 
         {searchError && <p className="text-xs text-destructive">{searchError}</p>}
         {result && result.total === 0 && (
