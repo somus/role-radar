@@ -1,8 +1,8 @@
 import { describe, test, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { parseSearchResults } from "../html-rewriter-parser";
-import type { SelectorConfig } from "../../shared/types";
+import { parseSearchResults, parseJobDetail } from "../html-rewriter-parser";
+import type { DetailSelectorConfig, SelectorConfig } from "../../shared/types";
 
 const selectors: SelectorConfig = JSON.parse(
   readFileSync(join(import.meta.dir, "../../../config/linkedin-selectors.json"), "utf-8")
@@ -63,5 +63,54 @@ describe("parseSearchResults", () => {
     const jobs = await parseSearchResults(html, selectors);
 
     expect(jobs).toHaveLength(0);
+  });
+});
+
+const detailSelectors: DetailSelectorConfig = {
+  description: "div.show-more-less-html__markup",
+  criteriaList: "li.description__job-criteria-item",
+  criteriaLabel: "h3.description__job-criteria-subheader",
+  criteriaValue: "span.description__job-criteria-text",
+};
+
+describe("parseJobDetail", () => {
+  test("extracts description text and all four criteria fields", async () => {
+    const html = readFileSync(join(fixtureDir, "job-detail.html"), "utf-8");
+    const detail = await parseJobDetail(html, detailSelectors);
+
+    expect(detail.description).toContain("Senior Backend Engineer");
+    expect(detail.description).toContain("Go or Rust");
+    expect(detail.seniority).toBe("Mid-Senior level");
+    expect(detail.employmentType).toBe("Full-time");
+    expect(detail.function).toBe("Engineering and Information Technology");
+    expect(detail.industry).toBe("Software Development");
+  });
+
+  test("returns null fields when page lacks description and criteria", async () => {
+    const html = readFileSync(join(fixtureDir, "job-detail-empty.html"), "utf-8");
+    const detail = await parseJobDetail(html, detailSelectors);
+
+    expect(detail.description).toBeNull();
+    expect(detail.seniority).toBeNull();
+    expect(detail.employmentType).toBeNull();
+    expect(detail.function).toBeNull();
+    expect(detail.industry).toBeNull();
+  });
+
+  test("partial criteria leaves missing fields null", async () => {
+    const html = `
+      <ul class="description__job-criteria-list">
+        <li class="description__job-criteria-item">
+          <h3 class="description__job-criteria-subheader">Employment type</h3>
+          <span class="description__job-criteria-text">Contract</span>
+        </li>
+      </ul>
+    `;
+    const detail = await parseJobDetail(html, detailSelectors);
+
+    expect(detail.employmentType).toBe("Contract");
+    expect(detail.seniority).toBeNull();
+    expect(detail.function).toBeNull();
+    expect(detail.industry).toBeNull();
   });
 });

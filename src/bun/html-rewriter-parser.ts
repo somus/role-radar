@@ -1,4 +1,4 @@
-import type { ParsedJob, SelectorConfig } from "../shared/types";
+import type { DetailSelectorConfig, ParsedJob, ParsedJobDetail, SelectorConfig } from "../shared/types";
 
 export async function parseSearchResults(
   html: string,
@@ -81,6 +81,82 @@ export async function parseSearchResults(
   }
 
   return jobs;
+}
+
+type CriterionAccum = { label: string; value: string };
+
+export async function parseJobDetail(
+  html: string,
+  selectors: DetailSelectorConfig
+): Promise<ParsedJobDetail> {
+  let description = "";
+  let inDescription = false;
+
+  const criteria: CriterionAccum[] = [];
+  let current: CriterionAccum | null = null;
+  let activeField: "label" | "value" | null = null;
+
+  const rewriter = new HTMLRewriter()
+    .on(selectors.description, {
+      element() {
+        inDescription = true;
+      },
+      text(chunk) {
+        if (!inDescription) return;
+        description += chunk.text;
+        if (chunk.lastInTextNode && description.length > 0) {
+          // Description spans multiple text chunks; keep accumulating.
+        }
+      },
+    })
+    .on(selectors.criteriaList, {
+      element() {
+        if (current) criteria.push(current);
+        current = { label: "", value: "" };
+        activeField = null;
+      },
+    })
+    .on(selectors.criteriaLabel, {
+      element() {
+        activeField = "label";
+      },
+      text(chunk) {
+        if (!current || activeField !== "label") return;
+        current.label += chunk.text;
+        if (chunk.lastInTextNode) activeField = null;
+      },
+    })
+    .on(selectors.criteriaValue, {
+      element() {
+        activeField = "value";
+      },
+      text(chunk) {
+        if (!current || activeField !== "value") return;
+        current.value += chunk.text;
+        if (chunk.lastInTextNode) activeField = null;
+      },
+    });
+
+  await rewriter.transform(new Response(html)).text();
+
+  if (current) criteria.push(current);
+
+  const map = new Map<string, string>();
+  for (const c of criteria) {
+    const key = c.label.trim().toLowerCase();
+    const val = c.value.trim();
+    if (key && val) map.set(key, val);
+  }
+
+  const cleanedDesc = description.replace(/\s+/g, " ").trim();
+
+  return {
+    description: cleanedDesc.length > 0 ? cleanedDesc : null,
+    seniority: map.get("seniority level") ?? null,
+    employmentType: map.get("employment type") ?? null,
+    function: map.get("job function") ?? null,
+    industry: map.get("industries") ?? map.get("industry") ?? null,
+  };
 }
 
 function finalize(partial: Partial<ParsedJob>): ParsedJob {

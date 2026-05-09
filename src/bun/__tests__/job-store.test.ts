@@ -2,12 +2,24 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { storeJobs, getJobFeed, storeSearchQuery } from "../job-store";
-import type { ParsedJob } from "../../shared/types";
+import {
+  storeJobs,
+  getJobFeed,
+  storeSearchQuery,
+  updateHeuristicScores,
+  getJobsForHeuristicScoring,
+  getJobsForDetailFetch,
+  setJobStatus,
+  setJobDetails,
+  getTopNSetting,
+} from "../job-store";
+import type { ParsedJob, ParsedJobDetail } from "../../shared/types";
 
 const migrationSql = [
   readFileSync(join(import.meta.dir, "../../../migrations/001_init.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/002_enrichment_questions_cache.sql"), "utf-8"),
+  readFileSync(join(import.meta.dir, "../../../migrations/003_generated_queries_cache.sql"), "utf-8"),
+  readFileSync(join(import.meta.dir, "../../../migrations/004_job_status_index.sql"), "utf-8"),
 ].join("\n");
 
 function makeJob(overrides: Partial<ParsedJob> = {}): ParsedJob {
@@ -178,5 +190,136 @@ describe("storeSearchQuery", () => {
 
     const row = db.query("SELECT * FROM search_queries WHERE profile_id = 1").get() as any;
     expect(row.query_type).toBe("exploratory");
+  });
+});
+
+function freshDb(): Database {
+  const db = new Database(":memory:");
+  db.exec("PRAGMA foreign_keys=ON");
+  db.exec(migrationSql);
+  return db;
+}
+
+function insertJob(db: Database, sourceId: string, status = "discovered", postedAt: string | null = null) {
+  db.query(
+    "INSERT INTO jobs (source, source_id, title, status, posted_at) VALUES (?, ?, ?, ?, ?)"
+  ).run("linkedin", sourceId, `Job ${sourceId}`, status, postedAt);
+  return (db.query("SELECT id FROM jobs WHERE source_id = ?").get(sourceId) as { id: number }).id;
+}
+
+describe("updateHeuristicScores", () => {
+  test("bulk-updates heuristic_score for given job ids", () => {
+    const db = freshDb();
+    const a = insertJob(db, "a");
+    const b = insertJob(db, "b");
+    const c = insertJob(db, "c");
+
+    updateHeuristicScores(db, [{ jobId: a, score: 0.9 }, { jobId: b, score: 0.5 }, { jobId: c, score: 0.1 }]);
+
+    const rows = db.query("SELECT id, heuristic_score FROM jobs ORDER BY id").all() as any[];
+    expect(rows[0]!.heuristic_score).toBeCloseTo(0.9, 5);
+    expect(rows[1]!.heuristic_score).toBeCloseTo(0.5, 5);
+    expect(rows[2]!.heuristic_score).toBeCloseTo(0.1, 5);
+  });
+
+  test("no-op for empty input", () => {
+    const db = freshDb();
+    insertJob(db, "a");
+    updateHeuristicScores(db, []);
+    const row = db.query("SELECT heuristic_score FROM jobs LIMIT 1").get() as any;
+    expect(row.heuristic_score).toBeNull();
+  });
+});
+
+describe("getJobsForHeuristicScoring", () => {
+  test("returns discovered jobs", () => {
+    const db = freshDb();
+    insertJob(db, "a", "discovered");
+    insertJob(db, "b", "discovered");
+    insertJob(db, "c", "ready_for_scoring");
+
+    const jobs = getJobsForHeuristicScoring(db);
+    expect(jobs.map(j => j.source_id).sort()).toEqual(["a", "b"]);
+  });
+
+  test("includes fetch_failed jobs older than 24h, excludes recent failures", () => {
+    const db = freshDb();
+    insertJob(db, "stale", "fetch_failed");
+    db.query("UPDATE jobs SET updated_at = datetime('now', '-2 days') WHERE source_id = 'stale'").run();
+    insertJob(db, "recent", "fetch_failed");
+
+    const jobs = getJobsForHeuristicScoring(db);
+    expect(jobs.map(j => j.source_id)).toEqual(["stale"]);
+  });
+
+  test("excludes parse_failed", () => {
+    const db = freshDb();
+    insertJob(db, "ok", "discovered");
+    insertJob(db, "bad", "parse_failed");
+
+    const jobs = getJobsForHeuristicScoring(db);
+    expect(jobs.map(j => j.source_id)).toEqual(["ok"]);
+  });
+});
+
+describe("setJobStatus", () => {
+  test("transitions job status and bumps updated_at", () => {
+    const db = freshDb();
+    const id = insertJob(db, "a", "discovered");
+
+    setJobStatus(db, id, "queued");
+    const row = db.query("SELECT status FROM jobs WHERE id = ?").get(id) as any;
+    expect(row.status).toBe("queued");
+  });
+});
+
+describe("setJobDetails", () => {
+  test("populates description + 4 criteria fields and sets status=ready_for_scoring", () => {
+    const db = freshDb();
+    const id = insertJob(db, "a", "fetching");
+
+    const details: ParsedJobDetail = {
+      description: "Build cool things.",
+      seniority: "Senior",
+      employmentType: "Full-time",
+      function: "Engineering",
+      industry: "Software",
+    };
+    setJobDetails(db, id, details);
+
+    const row = db.query("SELECT * FROM jobs WHERE id = ?").get(id) as any;
+    expect(row.status).toBe("ready_for_scoring");
+    expect(row.description).toBe("Build cool things.");
+    expect(row.seniority_level).toBe("Senior");
+    expect(row.employment_type).toBe("Full-time");
+    expect(row.job_function).toBe("Engineering");
+    expect(row.industry).toBe("Software");
+  });
+});
+
+describe("getJobsForDetailFetch", () => {
+  test("returns queued jobs ordered by heuristic_score desc, capped at limit", () => {
+    const db = freshDb();
+    const a = insertJob(db, "a", "queued");
+    const b = insertJob(db, "b", "queued");
+    const c = insertJob(db, "c", "queued");
+    insertJob(db, "d", "discovered");
+    updateHeuristicScores(db, [{ jobId: a, score: 0.5 }, { jobId: b, score: 0.9 }, { jobId: c, score: 0.1 }]);
+
+    const jobs = getJobsForDetailFetch(db, 2);
+    expect(jobs.map(j => j.source_id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("getTopNSetting", () => {
+  test("returns 50 by default from migration", () => {
+    const db = freshDb();
+    expect(getTopNSetting(db)).toBe(50);
+  });
+
+  test("returns custom value when settings row updated", () => {
+    const db = freshDb();
+    db.query("UPDATE settings SET value = '20' WHERE key = 'top_n_detail_fetch'").run();
+    expect(getTopNSetting(db)).toBe(20);
   });
 });

@@ -8,5 +8,11 @@
   "idAttribute": "data-entity-urn",
   "idPattern": "(\\d+)$",
   "maxAgeDays": 7,
-  "pagesPerQuery": 3
+  "pagesPerQuery": 3,
+  "detail": {
+    "description": "div.show-more-less-html__markup",
+    "criteriaList": "li.description__job-criteria-item",
+    "criteriaLabel": "h3.description__job-criteria-subheader",
+    "criteriaValue": "span.description__job-criteria-text"
+  }
 }

@@ -56,7 +56,13 @@ export type PipelineEvent =
   | { type: "queries:error"; payload: { message: string } }
   | { type: "fetchmore:searching"; payload: null }
   | { type: "fetchmore:complete"; payload: { jobsDiscovered: number } }
-  | { type: "fetchmore:error"; payload: { message: string } };
+  | { type: "fetchmore:error"; payload: { message: string } }
+  | { type: "detail:queued"; payload: { count: number } }
+  | { type: "detail:fetching"; payload: { jobId: number; sourceId: string } }
+  | { type: "detail:ready"; payload: { jobId: number } }
+  | { type: "detail:failed"; payload: { jobId: number; message: string } }
+  | { type: "detail:circuit_open"; payload: {} }
+  | { type: "detail:complete"; payload: { ready: number; failed: number } };
 
 type UpdateProfileParams = {
   fields: Partial<Pick<Profile, "roles" | "skills_primary" | "skills_secondary" | "experience_years" | "seniority" | "domains" | "preferences">>;
@@ -209,6 +215,22 @@ export type SelectorConfig = {
   idPattern: string;
   maxAgeDays?: number;
   pagesPerQuery?: number;
+  detail?: DetailSelectorConfig;
+};
+
+export type DetailSelectorConfig = {
+  description: string;
+  criteriaList: string;
+  criteriaLabel: string;
+  criteriaValue: string;
+};
+
+export type ParsedJobDetail = {
+  description: string | null;
+  seniority: string | null;
+  employmentType: string | null;
+  function: string | null;
+  industry: string | null;
 };
 
 export type SearchQuery = {

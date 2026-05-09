@@ -18,7 +18,14 @@ Explicit user constraints for job filtering: target locations, remote/hybrid/ons
 A single overall career level (e.g., "Senior", "Staff", "Mid"). Not per-skill — represents the user's general professional standing.
 
 ### Job
-A position discovered from a job source. Progresses through a lifecycle: discovered → queued → fetching → scoring → ready (or failed).
+A position discovered from a job source. Progresses through a lifecycle stored in `jobs.status`:
+
+- `discovered` — list-page parse only (title/company/location).
+- `queued` — selected by Heuristic Scorer, awaiting detail fetch.
+- `fetching` — Detail Fetch worker currently fetching the page.
+- `ready_for_scoring` — full description + criteria fields populated; awaiting LLM Fit Score.
+- `parse_failed` — list parse rejected the row (missing critical field). Terminal.
+- `fetch_failed` — detail fetch errored/timed out. Re-queued automatically after 24 h.
 
 ### Heuristic Score
 An internal-only prioritization signal computed from list-level data (title, location, recency). Used to select which jobs get expensive LLM scoring. Never shown to the user.

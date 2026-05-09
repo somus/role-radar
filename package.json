@@ -29,6 +29,7 @@
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
     "@kreuzberg/node": "^4.9.5",
+    "bunqueue": "^2.7.10",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electrobun": "^1.16.0",

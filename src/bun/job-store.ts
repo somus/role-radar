@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Job, JobFeedParams, JobFeedResult, ParsedJob, SearchQuery } from "../shared/types";
+import type { Job, JobFeedParams, JobFeedResult, ParsedJob, ParsedJobDetail, SearchQuery } from "../shared/types";
 
 export function storeJobs(
   db: Database,
@@ -72,6 +72,67 @@ export function storeSearchQuery(
     INSERT INTO search_queries (profile_id, keywords, location, experience_level, query_type)
     VALUES (?, ?, ?, ?, ?)
   `).run(profileId, query.keywords.join(", "), query.location ?? null, query.experienceLevel ?? null, queryType);
+}
+
+export function updateHeuristicScores(db: Database, scores: { jobId: number; score: number }[]): void {
+  if (scores.length === 0) return;
+  const stmt = db.query("UPDATE jobs SET heuristic_score = ?, updated_at = datetime('now') WHERE id = ?");
+  const tx = db.transaction((batch: { jobId: number; score: number }[]) => {
+    for (const s of batch) stmt.run(s.score, s.jobId);
+  });
+  tx(scores);
+}
+
+export function getJobsForHeuristicScoring(db: Database): Job[] {
+  const rows = db.query(`
+    SELECT * FROM jobs
+    WHERE status = 'discovered'
+       OR (status = 'fetch_failed' AND updated_at < datetime('now', '-1 day'))
+    ORDER BY id
+  `).all() as any[];
+  return rows.map(deserializeJob);
+}
+
+// Ordered by heuristic_score DESC; ties broken by id ASC for deterministic dispatch.
+export function getJobsForDetailFetch(db: Database, limit: number): Job[] {
+  const rows = db.query(`
+    SELECT * FROM jobs
+    WHERE status = 'queued'
+    ORDER BY heuristic_score DESC NULLS LAST, id ASC
+    LIMIT ?
+  `).all(limit) as any[];
+  return rows.map(deserializeJob);
+}
+
+export function setJobStatus(db: Database, jobId: number, status: string): void {
+  db.query("UPDATE jobs SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, jobId);
+}
+
+export function setJobDetails(db: Database, jobId: number, details: ParsedJobDetail): void {
+  db.query(`
+    UPDATE jobs SET
+      description = ?,
+      seniority_level = ?,
+      employment_type = ?,
+      job_function = ?,
+      industry = ?,
+      status = 'ready_for_scoring',
+      updated_at = datetime('now')
+    WHERE id = ?
+  `).run(
+    details.description,
+    details.seniority,
+    details.employmentType,
+    details.function,
+    details.industry,
+    jobId,
+  );
+}
+
+export function getTopNSetting(db: Database): number {
+  const row = db.query("SELECT value FROM settings WHERE key = 'top_n_detail_fetch'").get() as { value: string } | null;
+  const n = row ? parseInt(row.value, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 50;
 }
 
 function deserializeJob(row: any): Job {

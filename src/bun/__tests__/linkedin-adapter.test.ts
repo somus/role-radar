@@ -10,6 +10,9 @@ const selectors: SelectorConfig = JSON.parse(
 const fixtureHtml = readFileSync(
   join(import.meta.dir, "fixtures/linkedin/search-results.html"), "utf-8"
 );
+const detailHtml = readFileSync(
+  join(import.meta.dir, "fixtures/linkedin/job-detail.html"), "utf-8"
+);
 
 describe("LinkedInAdapter", () => {
   describe("buildSearchUrl", () => {
@@ -141,6 +144,41 @@ describe("LinkedInAdapter", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const url = (mockFetch.mock.calls[0]![0] as string);
       expect(url).not.toContain("f_WT");
+    });
+
+    test("fetchDetails: hits guest jobPosting URL with the source id", async () => {
+      mockFetch.mockResolvedValueOnce(new Response(detailHtml, { status: 200 }));
+
+      const detail = await adapter.fetchDetails("3901234567");
+      expect(detail.seniority).toBe("Mid-Senior level");
+      expect(detail.employmentType).toBe("Full-time");
+      expect(detail.description).toContain("Senior Backend Engineer");
+
+      const url = mockFetch.mock.calls[0]![0] as string;
+      expect(url).toContain("/jobs-guest/jobs/api/jobPosting/3901234567");
+    });
+
+    test("fetchDetails: retries on 429 then succeeds", async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response("", { status: 429 }))
+        .mockResolvedValueOnce(new Response(detailHtml, { status: 200 }));
+
+      const detail = await adapter.fetchDetails("3901234567");
+      expect(detail.industry).toBe("Software Development");
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test("fetchDetails: throws after max retries", async () => {
+      for (let i = 0; i < 6; i++) {
+        mockFetch.mockResolvedValueOnce(new Response("", { status: 429 }));
+      }
+      await expect(adapter.fetchDetails("xx")).rejects.toThrow();
+    });
+
+    test("fetchDetails: throws if selectors.detail missing", async () => {
+      const { detail: _drop, ...selectorsNoDetail } = selectors;
+      const a = new LinkedInAdapter({ fetchFn: mockFetch as any, selectors: selectorsNoDetail as any, delayMs: 0 });
+      await expect(a.fetchDetails("xx")).rejects.toThrow(/detail selectors/i);
     });
 
     test("fires sequential queries for multiple keywords", async () => {

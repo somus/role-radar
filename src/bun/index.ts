@@ -9,9 +9,10 @@ import { generateSearchQueries, getStoredSearchQueries } from "./query-generator
 import { getResumesDir } from "./paths";
 import { LinkedInAdapter, searchCities } from "./linkedin-adapter";
 import { storeJobs, getJobFeed, storeSearchQuery } from "./job-store";
+import { DetailFetchQueue, runHeuristicAndQueueDetails, type DetailEvent } from "./detail-fetch-queue";
 import { getSecret, storeSecret, deleteSecret } from "./secret-store";
 import type { SelectorConfig } from "../shared/types";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 function loadSelectors(): SelectorConfig {
@@ -32,6 +33,38 @@ function loadSelectors(): SelectorConfig {
 }
 
 const linkedInSelectors = loadSelectors();
+
+let detailQueue: DetailFetchQueue | null = null;
+
+function getDetailQueue(): DetailFetchQueue {
+  if (!detailQueue) {
+    const detailAdapter = new LinkedInAdapter({
+      selectors: linkedInSelectors,
+      maxAgeSecs: (linkedInSelectors.maxAgeDays ?? 7) * 86400,
+      delayMs: 0,
+    });
+    const dataDir = Utils.paths.userData;
+    mkdirSync(dataDir, { recursive: true });
+    detailQueue = new DetailFetchQueue({
+      db: getDb(),
+      adapter: detailAdapter,
+      dataPath: join(dataDir, "bunqueue.db"),
+      emit: (e: DetailEvent) => rpc.send.pipelineUpdate(e),
+    });
+  }
+  return detailQueue;
+}
+
+async function runFetchPipeline(profileId: number): Promise<void> {
+  const profile = getProfile(getDb());
+  if (!profile || profile.id !== profileId) return;
+  try {
+    const result = await runHeuristicAndQueueDetails(getDb(), profile, getDetailQueue());
+    console.log(`[detail] scored=${result.scored} queued=${result.queued}`);
+  } catch (err: any) {
+    console.error("[detail] pipeline failed:", err.message);
+  }
+}
 
 const migrationResult = runMigrations();
 console.log(`Migrations applied: ${migrationResult.applied}`);
@@ -92,6 +125,8 @@ async function runGeneratedSearches(queries: (SearchQuery & { strategy?: string 
     type: "queries:search:complete",
     payload: { queriesRun, jobsDiscovered: totalDiscovered },
   });
+  const profile = getProfile(getDb());
+  if (profile) await runFetchPipeline(profile.id);
   return totalDiscovered;
 }
 
@@ -235,6 +270,8 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
             type: "job:search:complete",
             payload: { total: result.inserted },
           });
+
+          if (profile) await runFetchPipeline(profile.id);
         } catch (err: any) {
           console.error(`[jobs] Search failed:`, err.message);
           rpc.send.pipelineUpdate({
@@ -354,6 +391,7 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
 
           console.log(`[fetchmore] Complete: ${totalDiscovered} new jobs`);
           rpc.send.pipelineUpdate({ type: "fetchmore:complete", payload: { jobsDiscovered: totalDiscovered } });
+          await runFetchPipeline(profile.id);
         } catch (err: any) {
           console.error("[fetchmore] Failed:", err.message);
           rpc.send.pipelineUpdate({ type: "fetchmore:error", payload: { message: err.message ?? "Fetch more failed" } });
@@ -440,6 +478,10 @@ const win = new BrowserWindow({
 });
 
 function shutdown() {
+  if (detailQueue) {
+    detailQueue.close().catch(() => {});
+    detailQueue = null;
+  }
   closeDb();
 }
 

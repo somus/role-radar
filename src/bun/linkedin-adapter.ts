@@ -1,5 +1,5 @@
-import type { CityResult, ParsedJob, SearchQuery, SelectorConfig } from "../shared/types";
-import { parseSearchResults } from "./html-rewriter-parser";
+import type { CityResult, ParsedJob, ParsedJobDetail, SearchQuery, SelectorConfig } from "../shared/types";
+import { parseSearchResults, parseJobDetail } from "./html-rewriter-parser";
 
 const BASE_URL = "https://www.linkedin.com";
 const TYPEAHEAD_URL = `${BASE_URL}/jobs-guest/api/typeaheadHits`;
@@ -141,6 +141,22 @@ export class LinkedInAdapter {
   }
 
   private async fetchAndParse(url: string): Promise<ParsedJob[]> {
+    const html = await this.fetchHtmlWithRetry(url);
+    return parseSearchResults(html, this.selectors);
+  }
+
+  async fetchDetails(jobId: string): Promise<ParsedJobDetail> {
+    if (!this.selectors.detail) {
+      throw new Error("LinkedIn detail selectors not configured");
+    }
+    // Guest-mode endpoint that returns the job-posting fragment HTML without auth.
+    // Path observed from LinkedIn's own job-search guest pages — same family as `seeMoreJobPostings/search`.
+    const url = `${BASE_URL}/jobs-guest/jobs/api/jobPosting/${encodeURIComponent(jobId)}`;
+    const html = await this.fetchHtmlWithRetry(url);
+    return parseJobDetail(html, this.selectors.detail);
+  }
+
+  private async fetchHtmlWithRetry(url: string): Promise<string> {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       const res = await this.fetchFn(url);
 
@@ -154,14 +170,12 @@ export class LinkedInAdapter {
       }
 
       if (!res.ok) {
-        throw new Error(`LinkedIn search failed: HTTP ${res.status}`);
+        throw new Error(`LinkedIn fetch failed: HTTP ${res.status}`);
       }
 
-      const html = await res.text();
-      return parseSearchResults(html, this.selectors);
+      return await res.text();
     }
-
-    throw new Error("Search failed");
+    throw new Error("LinkedIn fetch failed after retries");
   }
 }
 
