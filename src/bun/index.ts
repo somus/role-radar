@@ -8,9 +8,12 @@ import { generateQuestions, submitEnrichmentAnswers } from "./profile-enrichment
 import { generateSearchQueries, getStoredSearchQueries } from "./query-generator";
 import { getResumesDir } from "./paths";
 import { LinkedInAdapter, searchCities } from "./linkedin-adapter";
-import { storeJobs, getJobFeed, storeSearchQuery } from "./job-store";
+import { storeJobs, getJobFeed, getJobWithScore, storeSearchQuery } from "./job-store";
 import { DetailFetchQueue, runHeuristicAndQueueDetails, type DetailEvent } from "./detail-fetch-queue";
-import { getSecret, storeSecret, deleteSecret } from "./secret-store";
+import { runScoringPipeline, resolveSelectedModel } from "./scoring-pipeline";
+import { storeSecret } from "./secret-store";
+import { API_KEY_NAME, getConfiguredGeminiKey, hasConfiguredGeminiKey } from "./gemini-config";
+import { invalidateScoresAndRequeueJobs } from "./scoring-state";
 import type { SelectorConfig } from "../shared/types";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -35,6 +38,19 @@ function loadSelectors(): SelectorConfig {
 const linkedInSelectors = loadSelectors();
 
 let detailQueue: DetailFetchQueue | null = null;
+let rendererReady = false;
+let startupScoringResumeRequested = false;
+let startupScoringResumeStarted = false;
+
+function safePipelineUpdate(event: { type: string; payload: unknown }): void {
+  try {
+    rpc.send.pipelineUpdate(event);
+  } catch (err: any) {
+    console.warn(
+      `[pipeline] skipped event ${event.type}: ${err?.message ?? String(err)}`,
+    );
+  }
+}
 
 function getDetailQueue(): DetailFetchQueue {
   if (!detailQueue) {
@@ -49,7 +65,7 @@ function getDetailQueue(): DetailFetchQueue {
       db: getDb(),
       adapter: detailAdapter,
       dataPath: join(dataDir, "bunqueue.db"),
-      emit: (e: DetailEvent) => rpc.send.pipelineUpdate(e),
+      emit: (e: DetailEvent) => safePipelineUpdate(e),
     });
   }
   return detailQueue;
@@ -61,13 +77,46 @@ async function runFetchPipeline(profileId: number): Promise<void> {
   try {
     const result = await runHeuristicAndQueueDetails(getDb(), profile, getDetailQueue());
     console.log(`[detail] scored=${result.scored} queued=${result.queued}`);
+    await runScorePipeline(profile);
   } catch (err: any) {
     console.error("[detail] pipeline failed:", err.message);
   }
 }
 
+async function runScorePipeline(profile: NonNullable<ReturnType<typeof getProfile>>): Promise<void> {
+  const resumeRow = getDb()
+    .query("SELECT resume_text FROM profiles WHERE id = ?")
+    .get(profile.id) as { resume_text: string | null } | null;
+  if (!resumeRow?.resume_text) {
+    console.warn("[score] Skipping scoring: no stored resume text");
+    return;
+  }
+
+  const gemini = getGemini();
+  if (!gemini) {
+    console.warn("[score] Skipping scoring: no Gemini API key configured");
+    return;
+  }
+
+  const selectedModel = resolveSelectedModel(getDb());
+  console.log(`[score] starting scoring pipeline for profile=${profile.id} model=${selectedModel}`);
+
+  const dataDir = Utils.paths.userData;
+  mkdirSync(dataDir, { recursive: true });
+  const result = await runScoringPipeline({
+    db: getDb(),
+    profile,
+    resumeText: resumeRow.resume_text,
+    client: gemini,
+    dataPath: join(dataDir, "bunqueue-score.db"),
+    emit: (event) => safePipelineUpdate(event),
+  });
+  console.log(`[score] ready=${result.scored} failed=${result.failed}`);
+}
+
 const migrationResult = runMigrations();
 console.log(`Migrations applied: ${migrationResult.applied}`);
+recoverPendingScoringJobsOnStartup();
 
 const pdfRow = getDb().query("SELECT id, resume_pdf_path FROM profiles LIMIT 1").get() as { id: number; resume_pdf_path: string | null } | null;
 if (pdfRow?.resume_pdf_path && !existsSync(pdfRow.resume_pdf_path)) {
@@ -75,7 +124,6 @@ if (pdfRow?.resume_pdf_path && !existsSync(pdfRow.resume_pdf_path)) {
   console.log(`[startup] Cleared stale resume_pdf_path for profile ${pdfRow.id}`);
 }
 
-const API_KEY_NAME = "gemini_api_key_enc";
 let lastPagesPerQuery = 0;
 let lastSearchTime = 0;
 
@@ -131,7 +179,7 @@ async function runGeneratedSearches(queries: (SearchQuery & { strategy?: string 
 }
 
 function getGemini(): GeminiClient | null {
-  const key = getSecret(getDb(), API_KEY_NAME);
+  const key = getConfiguredGeminiKey(getDb());
   return key ? new GeminiClient(key) : null;
 }
 
@@ -139,6 +187,53 @@ function requireGemini(): GeminiClient {
   const client = getGemini();
   if (!client) throw new Error("No Gemini API key configured. Go to setup.");
   return client;
+}
+
+function recoverPendingScoringJobsOnStartup(): void {
+  const db = getDb();
+  const recovered = db.query(
+    "UPDATE jobs SET status = 'ready_for_scoring', updated_at = datetime('now') WHERE status = 'scoring'"
+  ).run();
+  if (Number(recovered.changes) > 0) {
+    console.log(`[startup] Recovered ${recovered.changes} stale scoring jobs back to ready_for_scoring`);
+  }
+}
+
+function resumePendingScoringOnStartup(): void {
+  if (startupScoringResumeStarted) return;
+  startupScoringResumeStarted = true;
+  const profile = getProfile(getDb());
+  if (!profile) {
+    console.log("[startup] No profile found; skipping pending scoring resume");
+    return;
+  }
+
+  const row = getDb()
+    .query("SELECT COUNT(*) as c FROM jobs WHERE status = 'ready_for_scoring'")
+    .get() as { c: number };
+  if (row.c === 0) {
+    console.log("[startup] No ready_for_scoring jobs to resume");
+    return;
+  }
+
+  console.log(`[startup] Resuming scoring for ${row.c} ready_for_scoring jobs`);
+  void runScorePipeline(profile).catch((err: any) => {
+    console.error("[startup] Pending scoring resume failed:", err?.message ?? String(err));
+  });
+}
+
+function requestStartupScoringResume(): void {
+  startupScoringResumeRequested = true;
+  if (!rendererReady || startupScoringResumeStarted) return;
+  resumePendingScoringOnStartup();
+}
+
+async function invalidateAndRescore(profile: NonNullable<ReturnType<typeof getProfile>>): Promise<void> {
+  const result = invalidateScoresAndRequeueJobs(getDb(), profile.id);
+  console.log(
+    `[score] invalidated scores=${result.deletedScores} reasoning=${result.deletedReasoning} requeued=${result.requeuedJobs} for profile=${profile.id}`,
+  );
+  await runScorePipeline(profile);
 }
 
 const rpc = BrowserView.defineRPC<AppRPCSchema>({
@@ -175,13 +270,17 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
         db.query("DELETE FROM profiles").run();
       },
       updateProfile: ({ fields, resumeText }) => {
-        return updateProfile(getDb(), fields, resumeText);
+        const updated = updateProfile(getDb(), fields, resumeText);
+        void invalidateAndRescore(updated).catch((err: any) => {
+          console.error("[score] re-score after profile update failed:", err?.message ?? String(err));
+        });
+        return updated;
       },
       runMigrations: () => {
         return runMigrations();
       },
       hasApiKey: () => {
-        return getSecret(getDb(), API_KEY_NAME) !== null;
+        return hasConfiguredGeminiKey(getDb());
       },
       setApiKey: async ({ key }) => {
         const client = new GeminiClient(key);
@@ -200,6 +299,9 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
       getJobFeed: (params) => {
         return getJobFeed(getDb(), params);
       },
+      getJobWithScore: ({ jobId }) => {
+        return getJobWithScore(getDb(), jobId);
+      },
       searchCities: async ({ query }) => {
         return searchCities(query);
       },
@@ -210,6 +312,12 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
       },
       log: ({ level, msg }) => {
         console.log(`[webview:${level}] ${msg}`);
+      },
+      uiReady: () => {
+        rendererReady = true;
+        if (startupScoringResumeRequested && !startupScoringResumeStarted) {
+          resumePendingScoringOnStartup();
+        }
       },
       generateEnrichmentQuestions: async ({ profileId }) => {
         try {
@@ -237,6 +345,9 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
           const t = performance.now();
           const updated = await submitEnrichmentAnswers(getDb(), profileId, answers, gemini);
           console.log(`[enrichment] Extraction + merge done (${((performance.now() - t) / 1000).toFixed(1)}s)`);
+          void invalidateAndRescore(updated).catch((err: any) => {
+            console.error("[score] re-score after enrichment failed:", err?.message ?? String(err));
+          });
           rpc.send.pipelineUpdate({ type: "enrichment:complete", payload: { profile: updated } });
         } catch (err: any) {
           rpc.send.pipelineUpdate({ type: "enrichment:error", payload: { message: err.message ?? "Failed to process answers" } });
@@ -476,6 +587,8 @@ const win = new BrowserWindow({
   },
   rpc,
 });
+
+requestStartupScoringResume();
 
 function shutdown() {
   if (detailQueue) {

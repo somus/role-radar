@@ -28,6 +28,15 @@ export class GeminiClient {
   }
 
   async infer<T>(prompt: string, schema: ZodType<T>, model: string = DEFAULT_MODEL): Promise<T> {
+    const result = await this.inferStructured(prompt, schema, model);
+    return result.data;
+  }
+
+  async inferStructured<T>(
+    prompt: string,
+    schema: ZodType<T>,
+    model: string = DEFAULT_MODEL,
+  ): Promise<{ data: T; rawText: string; model: string }> {
     let jsonSchema: object | undefined;
     try {
       jsonSchema = toJSONSchema(schema);
@@ -40,9 +49,14 @@ export class GeminiClient {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const started = performance.now();
+      const attemptNumber = attempt + 1;
 
       let res: Response;
       try {
+        console.log(
+          `[gemini] request model=${model} attempt=${attemptNumber}/${MAX_RETRIES} promptChars=${prompt.length} schema=${jsonSchema ? "json-schema" : "json-only"}`,
+        );
         res = await this.fetchFn(
           `${BASE_URL}/models/${model}:generateContent`,
           {
@@ -69,6 +83,13 @@ export class GeminiClient {
         clearTimeout(timer);
       }
 
+      console.log(
+        `[gemini] response model=${model} attempt=${attemptNumber}/${MAX_RETRIES} status=${res.status} in ${(
+          (performance.now() - started) /
+          1000
+        ).toFixed(1)}s`,
+      );
+
       if (!res.ok) {
         const errorBody = await res.text();
         throw new Error(`Gemini API error (${res.status}): ${errorBody}`);
@@ -86,16 +107,18 @@ export class GeminiClient {
         parsed = JSON.parse(text);
       } catch {
         lastError = new Error(`JSON parse failed: ${text}`);
+        console.warn(`[gemini] retry model=${model} attempt=${attemptNumber}/${MAX_RETRIES} reason=json-parse`);
         currentPrompt = `${prompt}\n\nYour previous response was not valid JSON. Please respond with valid JSON only.`;
         continue;
       }
 
       const result = schema.safeParse(parsed);
       if (result.success) {
-        return result.data;
+        return { data: result.data, rawText: text, model };
       }
 
       lastError = new Error(`Validation failed: ${JSON.stringify(result.error)}`);
+      console.warn(`[gemini] retry model=${model} attempt=${attemptNumber}/${MAX_RETRIES} reason=validation`);
       currentPrompt = `${prompt}\n\nYour previous response had validation errors: ${lastError.message}. Please fix and respond with valid JSON.`;
     }
 

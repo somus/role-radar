@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Job, JobFeedParams, JobFeedResult, ParsedJob, ParsedJobDetail, SearchQuery } from "../shared/types";
+import type { Job, JobFeedItem, JobFeedParams, JobFeedResult, JobScoreDetail, ParsedJob, ParsedJobDetail, SearchQuery } from "../shared/types";
 
 export function storeJobs(
   db: Database,
@@ -48,18 +48,95 @@ export function getJobFeed(
   ).get() as { c: number }).c;
 
   const rows = db.query(`
-    SELECT * FROM jobs
-    WHERE status != 'parse_failed'
-    ORDER BY is_new DESC, created_at DESC
+    SELECT
+      j.*,
+      s.skills_score,
+      s.seniority_score,
+      s.domain_score,
+      s.location_score,
+      s.composite,
+      s.overqualified,
+      s.matches,
+      s.gaps,
+      s.summary,
+      (
+        COALESCE(s.skills_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_skills')
+        + COALESCE(s.seniority_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_seniority')
+        + COALESCE(s.domain_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_domain')
+        + COALESCE(s.location_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_location')
+      ) AS weighted_composite
+    FROM jobs j
+    LEFT JOIN scores s
+      ON s.job_id = j.id
+      AND s.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
+    WHERE j.status != 'parse_failed'
+    ORDER BY
+      CASE WHEN s.id IS NULL THEN 1 ELSE 0 END,
+      weighted_composite DESC,
+      j.is_new DESC,
+      j.created_at DESC
     LIMIT ? OFFSET ?
   `).all(limit, offset) as any[];
 
   return {
-    jobs: rows.map(deserializeJob),
+    jobs: rows.map(deserializeJobFeedItem),
     total,
     hasMore: offset + limit < total,
     failedCount,
   };
+}
+
+export function getJobWithScore(db: Database, jobId: number): JobScoreDetail | null {
+  const row = db.query(`
+    SELECT
+      j.*,
+      s.skills_score,
+      s.seniority_score,
+      s.domain_score,
+      s.location_score,
+      s.composite,
+      s.overqualified,
+      s.matches,
+      s.gaps,
+      s.summary,
+      (
+        SELECT r.prompt
+        FROM llm_reasoning r
+        WHERE r.job_id = j.id
+          AND r.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
+        ORDER BY r.id DESC
+        LIMIT 1
+      ) AS reasoning_prompt,
+      (
+        SELECT r.response
+        FROM llm_reasoning r
+        WHERE r.job_id = j.id
+          AND r.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
+        ORDER BY r.id DESC
+        LIMIT 1
+      ) AS reasoning_response,
+      (
+        SELECT r.model
+        FROM llm_reasoning r
+        WHERE r.job_id = j.id
+          AND r.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
+        ORDER BY r.id DESC
+        LIMIT 1
+      ) AS reasoning_model,
+      (
+        COALESCE(s.skills_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_skills')
+        + COALESCE(s.seniority_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_seniority')
+        + COALESCE(s.domain_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_domain')
+        + COALESCE(s.location_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_location')
+      ) AS weighted_composite
+    FROM jobs j
+    LEFT JOIN scores s
+      ON s.job_id = j.id
+      AND s.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
+    WHERE j.id = ?
+  `).get(jobId) as any | null;
+
+  return row ? deserializeJobScoreDetail(row) : null;
 }
 
 export function storeSearchQuery(
@@ -157,4 +234,50 @@ function deserializeJob(row: any): Job {
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
+}
+
+function deserializeJobFeedItem(row: any): JobFeedItem {
+  const base = deserializeJob(row);
+  const weightedComposite = row.skills_score == null
+    ? null
+    : Number(Number(row.weighted_composite ?? 0).toFixed(2));
+
+  return {
+    ...base,
+    skills_score: row.skills_score ?? null,
+    seniority_score: row.seniority_score ?? null,
+    domain_score: row.domain_score ?? null,
+    location_score: row.location_score ?? null,
+    composite: row.composite ?? null,
+    weighted_composite: weightedComposite,
+    score_group: weightedComposite == null
+      ? null
+      : weightedComposite >= 80
+        ? "Top"
+        : weightedComposite >= 65
+          ? "Good"
+          : "Others",
+    overqualified: row.overqualified == null ? null : !!row.overqualified,
+    matches: safeParseJson(row.matches, []),
+    gaps: safeParseJson(row.gaps, []),
+    summary: row.summary ?? null,
+  };
+}
+
+function deserializeJobScoreDetail(row: any): JobScoreDetail {
+  return {
+    ...deserializeJobFeedItem(row),
+    reasoning_prompt: row.reasoning_prompt ?? null,
+    reasoning_response: row.reasoning_response ?? null,
+    reasoning_model: row.reasoning_model ?? null,
+  };
+}
+
+function safeParseJson<T>(value: unknown, fallback: T): T {
+  if (typeof value !== "string" || value.length === 0) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
 }

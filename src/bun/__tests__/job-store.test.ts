@@ -5,6 +5,7 @@ import { join } from "path";
 import {
   storeJobs,
   getJobFeed,
+  getJobWithScore,
   storeSearchQuery,
   updateHeuristicScores,
   getJobsForHeuristicScoring,
@@ -154,6 +155,34 @@ describe("getJobFeed", () => {
     expect(job).toHaveProperty("is_new");
     expect(typeof job.is_new).toBe("boolean");
     expect(typeof job.resume_generated).toBe("boolean");
+  });
+
+  test("getJobWithScore returns latest reasoning payload", () => {
+    db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
+      1,
+      JSON.stringify(["Backend Engineer"]),
+      "Senior",
+      JSON.stringify({ locations: [], remote: false, min_salary: null, company_sizes: [], country: null }),
+    );
+    db.query("UPDATE jobs SET status = 'ready', description = 'desc' WHERE source_id = 'job_0'").run();
+    const jobId = (db.query("SELECT id FROM jobs WHERE source_id = 'job_0'").get() as { id: number }).id;
+    db.query(
+      `INSERT INTO scores (
+        job_id, profile_id, skills_score, seniority_score, domain_score, location_score, composite, overqualified, matches, gaps, summary
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(jobId, 1, 80, 70, 60, 90, 77, 0, "[]", "[]", "Strong fit");
+    db.query(
+      "INSERT INTO llm_reasoning (job_id, profile_id, prompt, response, model) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)"
+    ).run(
+      jobId, 1, "old prompt", "old response", "gemini-2.5-flash",
+      jobId, 1, "new prompt", "new response", "gemini-2.5-flash-lite",
+    );
+
+    const detail = getJobWithScore(db, jobId);
+    expect(detail?.summary).toBe("Strong fit");
+    expect(detail?.reasoning_prompt).toBe("new prompt");
+    expect(detail?.reasoning_response).toBe("new response");
+    expect(detail?.reasoning_model).toBe("gemini-2.5-flash-lite");
   });
 });
 

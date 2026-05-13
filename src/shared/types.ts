@@ -62,7 +62,12 @@ export type PipelineEvent =
   | { type: "detail:ready"; payload: { jobId: number } }
   | { type: "detail:failed"; payload: { jobId: number; message: string } }
   | { type: "detail:circuit_open"; payload: {} }
-  | { type: "detail:complete"; payload: { ready: number; failed: number } };
+  | { type: "detail:complete"; payload: { ready: number; failed: number } }
+  | { type: "score:queued"; payload: { count: number } }
+  | { type: "score:scoring"; payload: { jobId: number } }
+  | { type: "score:ready"; payload: { jobId: number; composite: number; group: ScoreGroup; overqualified: boolean } }
+  | { type: "score:failed"; payload: { jobId: number; message: string } }
+  | { type: "score:complete"; payload: { ready: number; failed: number } };
 
 type UpdateProfileParams = {
   fields: Partial<Pick<Profile, "roles" | "skills_primary" | "skills_secondary" | "experience_years" | "seniority" | "domains" | "preferences">>;
@@ -82,10 +87,12 @@ export type AppRPCSchema = {
       setApiKey: { params: { key: string }; response: { valid: boolean } };
       getEnrichmentAnswers: { params: { profileId: number }; response: EnrichmentAnswer[] };
       getJobFeed: { params: JobFeedParams; response: JobFeedResult };
+      getJobWithScore: { params: { jobId: number }; response: JobScoreDetail | null };
       searchCities: { params: { query: string }; response: CityResult[] };
     };
     messages: {
       log: { level: string; msg: string };
+      uiReady: {};
       pickAndProcessResume: {};
       generateEnrichmentQuestions: { profileId: number };
       processEnrichmentAnswers: { profileId: number; answers: EnrichmentAnswer[] };
@@ -204,6 +211,40 @@ export type ParsedJob = {
   status: "discovered" | "parse_failed";
 };
 
+export type MatchType = "exact" | "inferred" | "partial";
+
+export type Match = {
+  skill: string;
+  type: MatchType;
+  context: string;
+};
+
+export type Gap = {
+  skill: string;
+  type: MatchType;
+  context: string;
+};
+
+export type FitResult = {
+  skills_score: number;
+  seniority_score: number;
+  domain_score: number;
+  location_score: number;
+  overqualified: boolean;
+  matches: Match[];
+  gaps: Gap[];
+  summary: string;
+};
+
+export type FitWeights = {
+  skills: number;
+  seniority: number;
+  domain: number;
+  location: number;
+};
+
+export type ScoreGroup = "Top" | "Good" | "Others";
+
 export type SelectorConfig = {
   jobCard: string;
   title: string;
@@ -254,8 +295,28 @@ export type JobFeedParams = {
   offset: number;
 };
 
+export type JobFeedItem = Job & {
+  skills_score: number | null;
+  seniority_score: number | null;
+  domain_score: number | null;
+  location_score: number | null;
+  composite: number | null;
+  weighted_composite: number | null;
+  score_group: ScoreGroup | null;
+  overqualified: boolean | null;
+  matches: Match[];
+  gaps: Gap[];
+  summary: string | null;
+};
+
+export type JobScoreDetail = JobFeedItem & {
+  reasoning_prompt: string | null;
+  reasoning_response: string | null;
+  reasoning_model: string | null;
+};
+
 export type JobFeedResult = {
-  jobs: Job[];
+  jobs: JobFeedItem[];
   total: number;
   hasMore: boolean;
   failedCount: number;

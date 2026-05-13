@@ -19,6 +19,10 @@ export function App() {
   const [autoStartSearch, setAutoStartSearch] = useState(false);
 
   useEffect(() => {
+    electrobun.rpc.send.uiReady({});
+  }, []);
+
+  useEffect(() => {
     async function init() {
       try {
         const health = await electrobun.rpc.request.getHealth();
