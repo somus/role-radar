@@ -7,4 +7,5 @@ Project-specific supplement for code reviews.
 - Flag stale Profile, Job, Search Query, and Fit Score state. User-visible results must match current Profile.
 - Flag ambiguous LLM-triggering actions. UI should make it clear when Gemini is called versus cached/local data reused.
 - Prefer tests at module seams (`query-generator`, stores, adapters) before adding broad UI harnesses.
+- Treat frontend view models (`*-view-model.ts`) and `onboarding-flow.ts` as unit-testable pure functions. Hooks (`use-*.ts`) carry async/pipeline wiring; flag missing teardown of refs, timers, and shared module-level state (e.g. `pendingGenerations`).
 - Do not add AI attribution, generated-by footers, or co-author trailers.

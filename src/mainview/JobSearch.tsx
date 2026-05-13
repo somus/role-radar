@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { KeyboardEvent } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v4";
+import { RefreshCw, Search, SlidersHorizontal, WandSparkles } from "lucide-react";
 import { electrobun } from "./electrobun";
 import { TagInput, type Tag } from "emblor";
 import { Button } from "@/components/ui/button";
@@ -24,6 +26,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import type { CityResult } from "../shared/types";
+import { useAutoSearch } from "./use-auto-search";
 
 const EXPERIENCE_LEVELS = [
   { value: "1", label: "Internship" },
@@ -69,16 +72,22 @@ type Props = {
 };
 
 export function JobSearch({ profileId, autoStartSearch, onAutoStartConsumed, onSearchComplete }: Props) {
-  const [searching, setSearching] = useState(false);
-  const [autoSearching, setAutoSearching] = useState(false);
-  const [autoStatus, setAutoStatus] = useState<string | null>(null);
-  const [result, setResult] = useState<{ total: number } | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const {
+    searching,
+    autoSearching,
+    autoStatus,
+    result,
+    searchError,
+    hasStoredQueries,
+    startGeneratedSearch,
+    beginManualSearch,
+  } = useAutoSearch(profileId, onSearchComplete);
+
   const [activeKeywordIdx, setActiveKeywordIdx] = useState<number | null>(null);
-  const [hasStoredQueries, setHasStoredQueries] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
   const autoStartedRef = useRef(false);
 
-  const { register, handleSubmit, control, setValue, watch, formState: { errors } } = useForm<SearchFormValues>({
+  const { handleSubmit, control, setValue, watch } = useForm<SearchFormValues>({
     resolver: zodResolver(searchFormSchema),
     defaultValues: {
       keywords: [],
@@ -92,62 +101,20 @@ export function JobSearch({ profileId, autoStartSearch, onAutoStartConsumed, onS
 
   const jobTypes = watch("jobTypes");
 
-  useEffect(() => {
-    function handlePipeline(e: Event) {
-      const { type, payload } = (e as CustomEvent).detail;
-      if (type === "job:searching") {
-        setSearching(true);
-        setResult(null);
-        setSearchError(null);
-      } else if (type === "job:search:complete") {
-        setSearching(false);
-        setResult((prev) => ({ total: (prev?.total ?? 0) + (payload as { total: number }).total }));
-        onSearchComplete();
-      } else if (type === "job:search:error") {
-        setSearching(false);
-        setSearchError((payload as { message: string }).message);
-      } else if (type === "queries:generating") {
-        setAutoSearching(true);
-        setAutoStatus("Generating queries from profile...");
-        setSearchError(null);
-        setResult(null);
-      } else if (type === "queries:generated") {
-        const { count } = payload as { count: number };
-        setAutoStatus(`Generated ${count} queries, searching...`);
-      } else if (type === "queries:progress") {
-        const { current, total, query, strategy } = payload as { current: number; total: number; query: string; strategy: string };
-        setAutoStatus(`Searching ${current}/${total}: [${strategy}] ${query}`);
-      } else if (type === "queries:search:complete") {
-        const { queriesRun, jobsDiscovered } = payload as { queriesRun: number; jobsDiscovered: number };
-        setAutoSearching(false);
-        setAutoStatus(null);
-        setHasStoredQueries(queriesRun > 0);
-        setResult({ total: jobsDiscovered });
-        onSearchComplete();
-      } else if (type === "queries:error") {
-        setAutoSearching(false);
-        setAutoStatus(null);
-        setSearchError((payload as { message: string }).message);
-      }
-    }
-
-    window.addEventListener("pipeline-update", handlePipeline);
-    return () => window.removeEventListener("pipeline-update", handlePipeline);
-  }, [onSearchComplete]);
+  const onAutoStartConsumedRef = useRef(onAutoStartConsumed);
+  onAutoStartConsumedRef.current = onAutoStartConsumed;
+  const startGeneratedSearchRef = useRef(startGeneratedSearch);
+  startGeneratedSearchRef.current = startGeneratedSearch;
 
   useEffect(() => {
     if (!autoStartSearch || autoStartedRef.current) return;
     autoStartedRef.current = true;
-    setSearchError(null);
-    setResult(null);
-    setAutoSearching(true);
-    onAutoStartConsumed?.();
-    electrobun.rpc.send.generateAndSearch({ profileId });
-  }, [autoStartSearch, onAutoStartConsumed, profileId]);
+    onAutoStartConsumedRef.current?.();
+    startGeneratedSearchRef.current("generate");
+  }, [autoStartSearch]);
 
   function onSubmit(data: SearchFormValues) {
-    setSearchError(null);
-    setResult(null);
+    beginManualSearch();
     electrobun.rpc.send.searchJobs({
       keywords: data.keywords,
       location: data.locationText.trim() || undefined,
@@ -176,40 +143,36 @@ export function JobSearch({ profileId, autoStartSearch, onAutoStartConsumed, onS
     setValue("geoId", "");
   }
 
-  const [manualOpen, setManualOpen] = useState(false);
   const isBusy = searching || autoSearching;
-
-  function startGeneratedSearch(kind: "generate" | "refresh" | "regenerate") {
-    setSearchError(null);
-    setResult(null);
-    setAutoSearching(true);
-    if (kind === "refresh") {
-      electrobun.rpc.send.refreshSearch({ profileId });
-    } else if (kind === "regenerate") {
-      electrobun.rpc.send.regenerateQueries({ profileId });
-    } else {
-      electrobun.rpc.send.generateAndSearch({ profileId });
-    }
-  }
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm">Job Search</CardTitle>
-          {autoStatus && (
-            <p className="text-xs text-muted-foreground animate-pulse">{autoStatus}</p>
-          )}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-sm">Discovery</CardTitle>
+            {(searching || autoSearching) && <Badge variant="secondary" className="text-[10px]">Running</Badge>}
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            Start with generated LinkedIn searches, then use manual search only when you want to steer a specific query.
+          </p>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {autoStatus && (
+          <div className="border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground animate-pulse">
+            {autoStatus}
+          </div>
+        )}
+
         <Button
           size="lg"
           className="w-full"
           disabled={isBusy}
           onClick={() => startGeneratedSearch("generate")}
         >
-          {autoSearching ? "Finding jobs..." : "Find jobs from profile"}
+          <WandSparkles className="size-4" />
+          {autoSearching ? "Finding jobs…" : "Find jobs from profile"}
         </Button>
 
         <div className="grid grid-cols-2 gap-2">
@@ -219,6 +182,7 @@ export function JobSearch({ profileId, autoStartSearch, onAutoStartConsumed, onS
             disabled={isBusy || !hasStoredQueries}
             onClick={() => startGeneratedSearch("refresh")}
           >
+            <RefreshCw className="size-3.5" />
             Search saved queries
           </Button>
           <Button
@@ -227,6 +191,7 @@ export function JobSearch({ profileId, autoStartSearch, onAutoStartConsumed, onS
             disabled={isBusy}
             onClick={() => startGeneratedSearch("regenerate")}
           >
+            <Search className="size-3.5" />
             Create new queries
           </Button>
         </div>
@@ -237,9 +202,22 @@ export function JobSearch({ profileId, autoStartSearch, onAutoStartConsumed, onS
           <p className="text-xs text-muted-foreground">Saved-query search unlocks after your first profile-based search.</p>
         )}
 
-        {searchError && <p className="text-xs text-destructive">{searchError}</p>}
+        {searchError && (
+          <div className="space-y-2 border border-destructive/30 bg-destructive/5 p-3">
+            <p className="text-xs font-medium text-destructive">Search failed</p>
+            <p className="text-[11px] leading-5 text-destructive/90">{searchError}</p>
+            <Button variant="outline" size="xs" onClick={() => startGeneratedSearch("generate")}>
+              Retry from profile
+            </Button>
+          </div>
+        )}
         {result && result.total === 0 && (
-          <p className="text-xs text-muted-foreground">No new jobs found.</p>
+          <div className="space-y-1 border border-dashed border-border bg-muted/20 p-3 text-center">
+            <p className="text-xs font-medium">No new jobs found</p>
+            <p className="text-[11px] leading-5 text-muted-foreground">
+              Generated queries can be narrow. Try Create new queries, or open Manual search to steer keywords and location.
+            </p>
+          </div>
         )}
         {result && result.total > 0 && (
           <Badge variant="secondary" className="text-xs">
@@ -250,6 +228,7 @@ export function JobSearch({ profileId, autoStartSearch, onAutoStartConsumed, onS
         <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="xs" className="w-full text-muted-foreground">
+              <SlidersHorizontal className="size-3" />
               {manualOpen ? "Hide manual search" : "Manual search"}
             </Button>
           </CollapsibleTrigger>
@@ -328,7 +307,7 @@ export function JobSearch({ profileId, autoStartSearch, onAutoStartConsumed, onS
                 </div>
 
                 <Button type="submit" disabled={isBusy} size="sm">
-                  {searching ? "Searching..." : "Search"}
+                  {searching ? "Searching…" : "Search"}
                 </Button>
               </div>
 
@@ -366,29 +345,38 @@ function CityAutocomplete({
 }) {
   const [suggestions, setSuggestions] = useState<CityResult[]>([]);
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const blurTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    return () => clearTimeout(debounceRef.current);
+    return () => {
+      clearTimeout(debounceRef.current);
+      clearTimeout(blurTimer.current);
+    };
   }, []);
 
   const fetchCities = useCallback(async (query: string) => {
-    if (query.length < 2) {
-      setSuggestions([]);
-      return;
-    }
     try {
       const results = await electrobun.rpc.request.searchCities({ query });
       setSuggestions(results);
       setOpen(results.length > 0);
+      setActiveIndex(results.length > 0 ? 0 : -1);
     } catch {
       setSuggestions([]);
+      setActiveIndex(-1);
     }
   }, []);
 
   function handleChange(text: string) {
     onChange(text);
     clearTimeout(debounceRef.current);
+    if (text.length < 2) {
+      setSuggestions([]);
+      setOpen(false);
+      setActiveIndex(-1);
+      return;
+    }
     debounceRef.current = setTimeout(() => fetchCities(text), 300);
   }
 
@@ -396,7 +384,37 @@ function CityAutocomplete({
     onSelect(city);
     setOpen(false);
     setSuggestions([]);
+    setActiveIndex(-1);
   }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (!open || suggestions.length === 0) {
+      if (event.key === "ArrowDown" && suggestions.length > 0) {
+        setOpen(true);
+        setActiveIndex(0);
+        event.preventDefault();
+      }
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((idx) => (idx + 1) % suggestions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((idx) => (idx - 1 + suggestions.length) % suggestions.length);
+    } else if (event.key === "Enter") {
+      if (activeIndex >= 0 && activeIndex < suggestions.length) {
+        event.preventDefault();
+        handleSelect(suggestions[activeIndex]!);
+      }
+    } else if (event.key === "Escape") {
+      setOpen(false);
+      setActiveIndex(-1);
+    }
+  }
+
+  const listboxId = "city-autocomplete-listbox";
+  const activeOptionId = activeIndex >= 0 ? `city-option-${activeIndex}` : undefined;
 
   return (
     <div className="relative">
@@ -404,25 +422,45 @@ function CityAutocomplete({
         value={value}
         onChange={(e) => handleChange(e.target.value)}
         onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
-        onBlur={() => setTimeout(() => setOpen(false), 200)}
+        onBlur={() => {
+          clearTimeout(blurTimer.current);
+          blurTimer.current = setTimeout(() => setOpen(false), 150);
+        }}
+        onKeyDown={handleKeyDown}
         placeholder="e.g., San Francisco"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listboxId}
+        aria-autocomplete="list"
+        aria-activedescendant={activeOptionId}
       />
       {open && suggestions.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-none border border-input bg-popover/90 backdrop-blur-xl shadow-md max-h-48 overflow-y-auto">
-          {suggestions.map((city) => (
-            <button
-              key={city.id}
-              type="button"
-              className="w-full text-left px-2 py-1.5 text-xs hover:bg-foreground/10 transition-colors"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleSelect(city)}
-            >
-              <span className="font-medium">{city.name}</span>
-              {city.country && (
-                <span className="text-muted-foreground ml-1">{city.country}</span>
-              )}
-            </button>
-          ))}
+        <div
+          id={listboxId}
+          role="listbox"
+          className="absolute z-50 mt-1 w-full rounded-none border border-input bg-popover/90 backdrop-blur-xl shadow-md max-h-48 overflow-y-auto"
+        >
+          {suggestions.map((city, index) => {
+            const active = index === activeIndex;
+            return (
+              <button
+                id={`city-option-${index}`}
+                key={city.id}
+                type="button"
+                role="option"
+                aria-selected={active}
+                className={`w-full text-left px-2 py-1.5 text-xs transition-colors ${active ? "bg-foreground/10" : "hover:bg-foreground/10"}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => handleSelect(city)}
+              >
+                <span className="font-medium">{city.name}</span>
+                {city.country && (
+                  <span className="text-muted-foreground ml-1">{city.country}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

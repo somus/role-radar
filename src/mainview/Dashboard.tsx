@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
+import type { ReactNode } from "react";
+import { Brain, CheckCircle2, KeyRound, RotateCcw, Search, UserRound } from "lucide-react";
 import { electrobun } from "./electrobun";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { JobSearch } from "./JobSearch";
 import { JobFeed } from "./JobFeed";
@@ -38,16 +39,27 @@ export function Dashboard({ profile, autoStartSearch, onAutoStartConsumed, onEdi
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-6xl mx-auto py-12 px-6 space-y-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight">Role Radar</h1>
-          <div className="flex gap-2">
+      <div className="mx-auto max-w-[1480px] px-5 py-4">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Role Radar</p>
+            <h1 className="text-xl font-semibold tracking-tight">
+              {hasSearched ? "Ranked job discovery" : "Start discovery"}
+            </h1>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={onEnrichment}>
+              <Brain className="size-3.5" />
+              Update Context
+            </Button>
             <Button variant="outline" size="sm" onClick={onEditProfile}>
+              <UserRound className="size-3.5" />
               Edit Profile
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm">
+                  <RotateCcw className="size-3.5" />
                   Reset
                 </Button>
               </AlertDialogTrigger>
@@ -78,98 +90,121 @@ export function Dashboard({ profile, autoStartSearch, onAutoStartConsumed, onEdi
               </AlertDialogContent>
             </AlertDialog>
           </div>
-        </div>
+        </header>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Your Profile</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Roles</p>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {profile.roles.map((r) => (
-                  <Badge key={r} variant="secondary">{r}</Badge>
-                ))}
-              </div>
-            </div>
+        <SystemStatusStrip profile={profile} hasSearched={hasSearched} />
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Seniority</p>
-                <p className="font-medium">{profile.seniority}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Experience</p>
-                <p className="font-medium">{profile.experience_years} years</p>
-              </div>
-            </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+          <aside className="space-y-4">
+            <ProfileSummaryPanel profile={profile} onEditProfile={onEditProfile} onEnrichment={onEnrichment} />
+            <JobSearch
+              profileId={profile.id}
+              autoStartSearch={autoStartSearch}
+              onAutoStartConsumed={onAutoStartConsumed}
+              onSearchComplete={handleSearchComplete}
+            />
+          </aside>
 
-            <div>
-              <p className="text-sm text-muted-foreground">Primary Skills</p>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {profile.skills_primary.map((s) => (
-                  <Badge key={s}>{s}</Badge>
-                ))}
-              </div>
-            </div>
-
-            {profile.domains.length > 0 && (
-              <div>
-                <p className="text-sm text-muted-foreground">Domains</p>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {profile.domains.map((d) => (
-                    <Badge key={d} variant="outline">{d}</Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <JobSearch
-          profileId={profile.id}
-          autoStartSearch={autoStartSearch}
-          onAutoStartConsumed={onAutoStartConsumed}
-          onSearchComplete={handleSearchComplete}
-        />
-
-        <JobFeed profileId={profile.id} refreshKey={feedRefresh} hasSearched={hasSearched} />
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={onEnrichment}>
-            <CardHeader>
-              <CardTitle className="text-sm">Enrichment Questions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">
-                {profile.career_intent
-                  ? "Re-answer follow-up questions to update scoring."
-                  : "Answer follow-up questions to improve scoring accuracy."}
-              </p>
-              <Badge variant={profile.career_intent ? "secondary" : "default"} className="mt-3 text-xs">
-                {profile.career_intent ? "Completed" : "Start"}
-              </Badge>
-            </CardContent>
-          </Card>
-          <PlaceholderCard title="Fit Scoring" description="AI-powered scoring of how well jobs match your profile." />
-          <PlaceholderCard title="Resume Generation" description="Generate tailored resumes for specific job listings." />
+          <main className="min-w-0">
+            <JobFeed profileId={profile.id} refreshKey={feedRefresh} hasSearched={hasSearched} />
+          </main>
         </div>
       </div>
     </div>
   );
 }
 
-function PlaceholderCard({ title, description }: { title: string; description: string }) {
+function SystemStatusStrip({ profile, hasSearched }: { profile: Profile; hasSearched: boolean }) {
+  const enriched = Boolean(profile.career_intent || profile.dealbreakers.length > 0 || profile.problem_solving_stories.length > 0);
+
   return (
-    <Card className="opacity-50">
-      <CardHeader>
-        <CardTitle className="text-sm">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-xs text-muted-foreground">{description}</p>
-        <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
-      </CardContent>
-    </Card>
+    <section className="mt-3 grid gap-2 md:grid-cols-4" aria-label="System status" aria-live="polite">
+      <StatusItem icon={<KeyRound className="size-3.5" />} label="AI key" value="Connected" />
+      <StatusItem icon={<UserRound className="size-3.5" />} label="Profile" value={`${profile.roles.length} roles, ${profile.skills_primary.length} skills`} />
+      <StatusItem icon={<Brain className="size-3.5" />} label="Context" value={enriched ? "Enriched" : "Needs answers"} tone={enriched ? "ok" : "warn"} />
+      <StatusItem icon={<Search className="size-3.5" />} label="Search" value={hasSearched ? "Feed active" : "Ready to run"} tone={hasSearched ? "ok" : "neutral"} />
+    </section>
+  );
+}
+
+function StatusItem({
+  icon,
+  label,
+  value,
+  tone = "ok",
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  tone?: "ok" | "warn" | "neutral";
+}) {
+  return (
+    <div className="flex items-center gap-2 border border-border bg-card px-3 py-2">
+      <span className={tone === "warn" ? "text-amber-600 dark:text-amber-400" : tone === "neutral" ? "text-muted-foreground" : "text-primary"}>
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+        <p className="truncate text-xs font-medium">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function ProfileSummaryPanel({
+  profile,
+  onEditProfile,
+  onEnrichment,
+}: {
+  profile: Profile;
+  onEditProfile: () => void;
+  onEnrichment: () => void;
+}) {
+  return (
+    <section className="border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Scoring profile</p>
+          <h2 className="mt-1 text-base font-semibold">{profile.seniority} candidate</h2>
+          <p className="text-xs text-muted-foreground">{profile.experience_years} years experience</p>
+        </div>
+        <CheckCircle2 className="size-4 text-primary" />
+      </div>
+
+      <div className="mt-4 space-y-4">
+        <TokenGroup label="Target roles" values={profile.roles} variant="secondary" />
+        <TokenGroup label="Primary skills" values={profile.skills_primary.slice(0, 10)} />
+        {profile.domains.length > 0 && <TokenGroup label="Domains" values={profile.domains} variant="outline" />}
+        {profile.dealbreakers.length > 0 && <TokenGroup label="Dealbreakers" values={profile.dealbreakers} variant="destructive" />}
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Button variant="outline" size="sm" onClick={onEditProfile}>Edit profile</Button>
+        <Button variant="secondary" size="sm" onClick={onEnrichment}>
+          {profile.career_intent ? "Update context" : "Add context"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function TokenGroup({
+  label,
+  values,
+  variant = "default",
+}: {
+  label: string;
+  values: string[];
+  variant?: "default" | "secondary" | "outline" | "destructive";
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {values.length > 0
+          ? values.map((value) => <Badge key={value} variant={variant} className="max-w-full truncate">{value}</Badge>)
+          : <span className="text-xs text-muted-foreground">None set</span>}
+      </div>
+    </div>
   );
 }

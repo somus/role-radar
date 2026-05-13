@@ -6,7 +6,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: var(--font-mono);
+    --font-heading: var(--font-ui);
+    --font-sans: var(--font-ui);
     --font-mono: 'JetBrains Mono Variable', monospace;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
@@ -49,38 +50,39 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.141 0.005 285.823);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.141 0.005 285.823);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.141 0.005 285.823);
-    --primary: oklch(0.841 0.238 128.85);
-    --primary-foreground: oklch(0.405 0.101 131.063);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.001 286.375);
-    --muted-foreground: oklch(0.552 0.016 285.938);
-    --accent: oklch(0.967 0.001 286.375);
-    --accent-foreground: oklch(0.21 0.006 285.885);
+    --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --background: oklch(0.992 0.004 145);
+    --foreground: oklch(0.18 0.018 250);
+    --card: oklch(0.998 0.003 145);
+    --card-foreground: oklch(0.18 0.018 250);
+    --popover: oklch(0.998 0.003 145);
+    --popover-foreground: oklch(0.18 0.018 250);
+    --primary: oklch(0.57 0.16 145);
+    --primary-foreground: oklch(0.985 0.012 145);
+    --secondary: oklch(0.955 0.006 250);
+    --secondary-foreground: oklch(0.23 0.018 250);
+    --muted: oklch(0.955 0.006 250);
+    --muted-foreground: oklch(0.48 0.025 250);
+    --accent: oklch(0.945 0.012 145);
+    --accent-foreground: oklch(0.23 0.018 250);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.004 286.32);
-    --input: oklch(0.92 0.004 286.32);
-    --ring: oklch(0.705 0.015 286.067);
-    --chart-1: oklch(0.871 0.006 286.286);
-    --chart-2: oklch(0.552 0.016 285.938);
-    --chart-3: oklch(0.442 0.017 285.786);
-    --chart-4: oklch(0.37 0.013 285.805);
-    --chart-5: oklch(0.274 0.006 286.033);
+    --border: oklch(0.88 0.012 250);
+    --input: oklch(0.88 0.012 250);
+    --ring: oklch(0.57 0.16 145);
+    --chart-1: oklch(0.57 0.16 145);
+    --chart-2: oklch(0.62 0.14 70);
+    --chart-3: oklch(0.58 0.13 250);
+    --chart-4: oklch(0.56 0.15 25);
+    --chart-5: oklch(0.44 0.05 250);
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.141 0.005 285.823);
-    --sidebar-primary: oklch(0.648 0.2 131.684);
-    --sidebar-primary-foreground: oklch(0.986 0.031 120.757);
-    --sidebar-accent: oklch(0.967 0.001 286.375);
-    --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-    --sidebar-border: oklch(0.92 0.004 286.32);
-    --sidebar-ring: oklch(0.705 0.015 286.067);
+    --sidebar: oklch(0.968 0.006 250);
+    --sidebar-foreground: oklch(0.18 0.018 250);
+    --sidebar-primary: oklch(0.57 0.16 145);
+    --sidebar-primary-foreground: oklch(0.985 0.012 145);
+    --sidebar-accent: oklch(0.945 0.012 145);
+    --sidebar-accent-foreground: oklch(0.23 0.018 250);
+    --sidebar-border: oklch(0.88 0.012 250);
+    --sidebar-ring: oklch(0.57 0.16 145);
 }
 
 .dark {
@@ -125,6 +127,40 @@
     @apply bg-background text-foreground;
     }
   html {
-    @apply font-mono;
+    font-family: var(--font-ui);
     }
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: oklch(0.30 0.02 250);
+    --input: oklch(0.30 0.02 250);
+    --muted-foreground: oklch(0.30 0.02 250);
+  }
+  .dark {
+    --border: oklch(0.92 0 0);
+    --input: oklch(0.92 0 0);
+    --muted-foreground: oklch(0.90 0.015 286);
+  }
+  *:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

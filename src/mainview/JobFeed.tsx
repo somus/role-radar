@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import { ChevronDown, RotateCcw } from "lucide-react";
+import type { KeyboardEvent, ReactNode } from "react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Clock3, Rows3, Rows4, RotateCcw, SlidersHorizontal, Target } from "lucide-react";
 import { electrobun } from "./electrobun";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
-import { DEFAULT_JOB_FEED_FILTERS, type FitWeights, type Gap, type JobDetail, type JobFeedFilters, type JobFeedItem, type JobFeedResult, type JobReasoning, type Match, type ScoreGroup } from "../shared/types";
+import { DEFAULT_JOB_FEED_FILTERS, type FitWeights, type JobDetail, type JobFeedFilters, type JobFeedItem, type JobFeedResult } from "../shared/types";
 import { DEFAULT_FIT_WEIGHTS, adjustWeights, type FitWeightKey } from "../shared/score-weights";
-import { buildDimensionRows, isSelectedDetailCurrent, type DimensionRow, type ScoreTone } from "./job-detail-view-model";
+import { isSelectedDetailCurrent } from "./job-detail-view-model";
 import { applyWeightsToJob, applyWeightsToJobFeed } from "./job-feed-rerank";
 import { reconcileSelectedJobId } from "./job-feed-filters";
 import { buildJobFeedSections, isFailedStatus, isPendingStatus } from "./job-feed-sections";
+import { buildFeedStatusSummary, buildFilterChips, buildJobNextAction, type FeedStatusSummary, type FilterChip } from "./feed-view-model";
+import { useJobReasoning } from "./use-job-reasoning";
+import { JobDetailPanel, scoreBadgeClass } from "./JobDetailPanel";
 import { cn } from "@/lib/utils";
 
 const JOB_LIST_PAGE_SIZE = 200;
@@ -20,6 +23,18 @@ const WEIGHT_SAVE_DEBOUNCE_MS = 350;
 const FILTER_SAVE_DEBOUNCE_MS = 250;
 
 type SaveStatus = "saving" | "saved" | null;
+type FeedDensity = "comfortable" | "compact";
+const DENSITY_STORAGE_KEY = "roleRadar.jobFeedDensity";
+
+function loadDensity(): FeedDensity {
+  if (typeof window === "undefined") return "comfortable";
+  try {
+    const stored = window.localStorage.getItem(DENSITY_STORAGE_KEY);
+    return stored === "compact" ? "compact" : "comfortable";
+  } catch {
+    return "comfortable";
+  }
+}
 
 type Props = {
   profileId: number;
@@ -55,17 +70,25 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailRefreshKey, setDetailRefreshKey] = useState(0);
-  const [reasoningOpen, setReasoningOpen] = useState(false);
-  const [reasoningLoading, setReasoningLoading] = useState(false);
-  const [reasoningError, setReasoningError] = useState<string | null>(null);
-  const [reasoning, setReasoning] = useState<JobReasoning | null>(null);
+  const reasoningState = useJobReasoning(selectedJobId);
   const [weights, setWeights] = useState<FitWeights>(DEFAULT_FIT_WEIGHTS);
   const [weightsError, setWeightsError] = useState<string | null>(null);
   const [weightSaveStatus, setWeightSaveStatus] = useState<SaveStatus>(null);
   const [filters, setFilters] = useState<JobFeedFilters>(DEFAULT_JOB_FEED_FILTERS);
   const [filtersError, setFiltersError] = useState<string | null>(null);
   const [filterSaveStatus, setFilterSaveStatus] = useState<SaveStatus>(null);
-  const reasoningLoadedFor = useRef<number | null>(null);
+  const [density, setDensity] = useState<FeedDensity>(loadDensity);
+  const toggleDensity = useCallback(() => {
+    setDensity((current) => {
+      const next: FeedDensity = current === "comfortable" ? "compact" : "comfortable";
+      try {
+        window.localStorage.setItem(DENSITY_STORAGE_KEY, next);
+      } catch {
+        // ignore storage errors (private mode, quota)
+      }
+      return next;
+    });
+  }, []);
   const weightsRef = useRef<FitWeights>(DEFAULT_FIT_WEIGHTS);
   const filtersRef = useRef<JobFeedFilters>(DEFAULT_JOB_FEED_FILTERS);
   const weightsSaveDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -310,50 +333,50 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
     };
   }, [selectedJobId, detailRefreshKey]);
 
-  useEffect(() => {
-    setReasoningOpen(false);
-    setReasoning(null);
-    setReasoningError(null);
-    setReasoningLoading(false);
-    reasoningLoadedFor.current = null;
-  }, [selectedJobId]);
-
-  useEffect(() => {
-    if (!reasoningOpen || !selectedJobId || reasoningLoadedFor.current === selectedJobId) return;
-
-    let cancelled = false;
-    setReasoningLoading(true);
-    setReasoningError(null);
-    void electrobun.rpc.request.getJobReasoning({ jobId: selectedJobId })
-      .then((payload) => {
-        if (cancelled) return;
-        setReasoning(payload);
-        reasoningLoadedFor.current = selectedJobId;
-      })
-      .catch((e: any) => {
-        if (cancelled) return;
-        setReasoning(null);
-        setReasoningError(e.message ?? "Failed to load reasoning.");
-      })
-      .finally(() => {
-        if (!cancelled) setReasoningLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reasoningOpen, selectedJobId]);
-
   const selectJob = useCallback((jobId: number) => {
     setSelectedJobId(jobId);
     setSelectedJob((current) => current?.id === jobId ? current : null);
   }, []);
 
+  const sections = buildJobFeedSections(jobs);
+  const flatJobs = sections.flatMap((section) => section.jobs);
+
+  const handleListKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (flatJobs.length === 0) return;
+    event.preventDefault();
+    const currentIndex = flatJobs.findIndex((job) => job.id === selectedJobId);
+    let nextIndex: number;
+    if (currentIndex === -1) {
+      nextIndex = 0;
+    } else if (event.key === "ArrowDown") {
+      nextIndex = Math.min(currentIndex + 1, flatJobs.length - 1);
+    } else {
+      nextIndex = Math.max(currentIndex - 1, 0);
+    }
+    const nextJob = flatJobs[nextIndex];
+    if (nextJob) selectJob(nextJob.id);
+  }, [flatJobs, selectJob, selectedJobId]);
+
   const filtersActive = hasActiveFeedFilters(filters);
+  const feedSummary = buildFeedStatusSummary(jobs, total, failedCount);
+  const filterChips = buildFilterChips(filters, weights);
 
   if (!loading && jobs.length === 0) {
     return (
       <div className="space-y-3">
+        <FeedCommandBar
+          summary={feedSummary}
+          filterChips={filterChips}
+          fetchMoreResult={fetchMoreResult}
+          fetchingMore={fetchingMore}
+          showFetchMore={false}
+          onFetchMore={() => {}}
+          filtersActive={filtersActive}
+          onClearFilters={resetFilters}
+          density={density}
+          onToggleDensity={toggleDensity}
+        />
         <FeedControlsPanel
           weights={weights}
           weightsError={weightsError}
@@ -365,14 +388,22 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
           onMinScoreChange={applyMinScoreChange}
           onHideDealbreakersChange={applyHideDealbreakersChange}
           onReset={resetFeedControls}
+          defaultOpen
         />
-        <div className="space-y-2 py-4 text-center">
-          <p className="text-xs text-muted-foreground">
+        <div className="space-y-3 border border-dashed border-border bg-muted/20 px-6 py-10 text-center">
+          <p className="text-sm font-medium">
             {filtersActive
               ? "No jobs match the current feed filters."
               : hasSearched
                 ? "No jobs found. Try different keywords or broaden your filters."
                 : "No jobs yet. Run a search to discover jobs."}
+          </p>
+          <p className="mx-auto max-w-md text-xs leading-5 text-muted-foreground">
+            {filtersActive
+              ? "Clear the active filters to bring hidden jobs back into the list."
+              : hasSearched
+                ? "Generated searches can be too narrow. Create new queries or use manual search for a specific title and location."
+                : "Use Discovery to find jobs from your profile. Scored roles will appear here as analysis finishes."}
           </p>
           {filtersActive && (
             <Button variant="outline" size="sm" onClick={resetFilters}>
@@ -384,49 +415,34 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
     );
   }
 
-  const sections = buildJobFeedSections(jobs);
   const selectedDetailCurrent = isSelectedDetailCurrent(selectedJobId, selectedJob);
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="space-y-0.5">
-          {total > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {total} {total === 1 ? "job" : "jobs"}
-            </p>
-          )}
-          {failedCount > 0 && (
-            <p className="text-xs text-destructive">
-              {failedCount} {failedCount === 1 ? "job" : "jobs"} failed to parse - selectors may need updating
-            </p>
-          )}
-        </div>
-        {total > 0 && (
-          <div className="flex items-center gap-2">
-            {fetchMoreResult !== null && (
-              <p className="text-xs text-muted-foreground">
-                {fetchMoreResult > 0 ? `${fetchMoreResult} new jobs found` : "No new jobs found"}
-              </p>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={fetchingMore}
-              onClick={() => {
-                setFetchMoreResult(null);
-                electrobun.rpc.send.fetchMoreJobs({ profileId });
-              }}
-            >
-              {fetchingMore ? "Fetching…" : "Fetch More"}
-            </Button>
-          </div>
-        )}
-      </div>
+      <FeedCommandBar
+        summary={feedSummary}
+        filterChips={filterChips}
+        fetchMoreResult={fetchMoreResult}
+        fetchingMore={fetchingMore}
+        showFetchMore={total > 0}
+        onFetchMore={() => {
+          setFetchMoreResult(null);
+          electrobun.rpc.send.fetchMoreJobs({ profileId });
+        }}
+        filtersActive={filtersActive}
+        onClearFilters={resetFilters}
+        density={density}
+        onToggleDensity={toggleDensity}
+      />
 
       <div className="grid min-h-[680px] overflow-hidden border border-border bg-background md:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)]">
         <aside className="min-h-0 border-b border-border md:border-b-0 md:border-r">
-          <div className="max-h-[680px] space-y-4 overflow-y-auto p-3" role="listbox" aria-label="Jobs">
+          <div
+            className="max-h-[680px] space-y-4 overflow-y-auto p-3"
+            role="listbox"
+            aria-label="Jobs"
+            onKeyDown={handleListKeyDown}
+          >
             <FeedControlsPanel
               weights={weights}
               weightsError={weightsError}
@@ -438,6 +454,7 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
               onMinScoreChange={applyMinScoreChange}
               onHideDealbreakersChange={applyHideDealbreakersChange}
               onReset={resetFeedControls}
+              defaultOpen
             />
             {loading && jobs.length === 0 && (
               <p className="py-4 text-center text-xs text-muted-foreground">Loading jobs…</p>
@@ -457,6 +474,7 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
                     job={job}
                     selected={job.id === selectedJobId}
                     onSelect={() => selectJob(job.id)}
+                    density={density}
                   />
                 ))}
               </div>
@@ -499,16 +517,145 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
           {!detailLoading && !detailError && selectedDetailCurrent && selectedJob && (
             <JobDetailPanel
               job={selectedJob}
-              reasoningOpen={reasoningOpen}
-              onReasoningOpenChange={setReasoningOpen}
-              reasoning={reasoning}
-              reasoningLoading={reasoningLoading}
-              reasoningError={reasoningError}
+              reasoningOpen={reasoningState.reasoningOpen}
+              onReasoningOpenChange={reasoningState.setReasoningOpen}
+              reasoning={reasoningState.reasoning}
+              reasoningLoading={reasoningState.reasoningLoading}
+              reasoningError={reasoningState.reasoningError}
             />
           )}
         </main>
       </div>
+      <p className="px-1 text-[11px] text-muted-foreground">
+        <kbd className="mr-1 rounded border border-border bg-muted/40 px-1 py-px text-[10px]">↑↓</kbd>
+        navigate
+        <span className="mx-2 opacity-60">·</span>
+        <kbd className="mr-1 rounded border border-border bg-muted/40 px-1 py-px text-[10px]">Enter</kbd>
+        /
+        <kbd className="ml-1 mr-1 rounded border border-border bg-muted/40 px-1 py-px text-[10px]">Space</kbd>
+        select
+      </p>
     </div>
+  );
+}
+
+function FeedCommandBar({
+  summary,
+  filterChips,
+  fetchMoreResult,
+  fetchingMore,
+  showFetchMore,
+  onFetchMore,
+  filtersActive,
+  onClearFilters,
+  density,
+  onToggleDensity,
+}: {
+  summary: FeedStatusSummary;
+  filterChips: FilterChip[];
+  fetchMoreResult: number | null;
+  fetchingMore: boolean;
+  showFetchMore: boolean;
+  onFetchMore: () => void;
+  filtersActive: boolean;
+  onClearFilters: () => void;
+  density: FeedDensity;
+  onToggleDensity: () => void;
+}) {
+  return (
+    <section className="border border-border bg-card p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Job command center</p>
+            <h2 className="text-base font-semibold tracking-tight">
+              {summary.total > 0 ? `${summary.total} roles in view` : "No roles in view"}
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <StatusBadge icon={<CheckCircle2 className="size-3" />} label={`${summary.ready} scored`} />
+            <StatusBadge icon={<Clock3 className="size-3" />} label={`${summary.pending} processing`} />
+            {summary.newCount > 0 && <StatusBadge icon={<Target className="size-3" />} label={`${summary.newCount} new`} />}
+            {summary.dealbreakerCount > 0 && <StatusBadge icon={<AlertTriangle className="size-3" />} label={`${summary.dealbreakerCount} dealbreaker`} tone="warning" />}
+            {summary.failed > 0 && <StatusBadge icon={<AlertTriangle className="size-3" />} label={`${summary.failed} failed`} tone="danger" />}
+          </div>
+          {(filterChips.length > 0 || filtersActive) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {filterChips.map((chip) => (
+                <Badge
+                  key={chip.key}
+                  variant={chip.tone === "warning" ? "destructive" : chip.tone === "active" ? "secondary" : "outline"}
+                  className="text-[10px]"
+                >
+                  {chip.label}
+                </Badge>
+              ))}
+              {filtersActive && (
+                <button
+                  type="button"
+                  onClick={onClearFilters}
+                  className="text-[10px] font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onToggleDensity}
+            title={density === "comfortable" ? "Switch to compact rows" : "Switch to comfortable rows"}
+            aria-label={density === "comfortable" ? "Switch to compact rows" : "Switch to comfortable rows"}
+          >
+            {density === "comfortable" ? <Rows3 className="size-3.5" /> : <Rows4 className="size-3.5" />}
+            {density === "comfortable" ? "Compact" : "Comfortable"}
+          </Button>
+          {showFetchMore && (
+            <>
+              {fetchMoreResult !== null && (
+                <p className="text-xs text-muted-foreground">
+                  {fetchMoreResult > 0 ? `${fetchMoreResult} new jobs found` : "No new jobs found"}
+                </p>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={fetchingMore}
+                onClick={onFetchMore}
+              >
+                {fetchingMore ? "Fetching…" : "Fetch More"}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StatusBadge({
+  icon,
+  label,
+  tone = "neutral",
+}: {
+  icon: ReactNode;
+  label: string;
+  tone?: "neutral" | "warning" | "danger";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 border border-border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground",
+        tone === "warning" && "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300",
+        tone === "danger" && "border-red-300 bg-red-50 text-red-700 dark:border-destructive/40 dark:bg-destructive/10 dark:text-destructive",
+      )}
+    >
+      {icon}
+      {label}
+    </span>
   );
 }
 
@@ -523,6 +670,7 @@ function FeedControlsPanel({
   onMinScoreChange,
   onHideDealbreakersChange,
   onReset,
+  defaultOpen = false,
 }: {
   weights: FitWeights;
   weightsError: string | null;
@@ -534,14 +682,18 @@ function FeedControlsPanel({
   onMinScoreChange: (value: number) => void;
   onHideDealbreakersChange: (checked: boolean) => void;
   onReset: () => void;
+  defaultOpen?: boolean;
 }) {
   return (
-    <Collapsible defaultOpen={false}>
+    <Collapsible defaultOpen={defaultOpen}>
       <section className="border border-border bg-muted/20">
         <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
           <CollapsibleTrigger asChild>
             <Button variant="ghost" className="group h-7 flex-1 justify-between rounded-none px-0 text-left text-xs font-medium">
-              <span>Feed controls</span>
+              <span className="inline-flex items-center gap-1.5">
+                <SlidersHorizontal className="size-3.5" />
+                Ranking and filters
+              </span>
               <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
             </Button>
           </CollapsibleTrigger>
@@ -603,7 +755,7 @@ function FeedControlsPanel({
             {weightsError || filtersError ? (
               <p className="text-xs text-destructive">{weightsError ?? filtersError}</p>
             ) : weightSaveStatus === "saving" || filterSaveStatus === "saving" ? (
-              <p className="text-xs text-muted-foreground">Saving...</p>
+              <p className="text-xs text-muted-foreground">Saving…</p>
             ) : weightSaveStatus === "saved" || filterSaveStatus === "saved" ? (
               <p className="text-xs text-muted-foreground">Saved</p>
             ) : null}
@@ -614,7 +766,20 @@ function FeedControlsPanel({
   );
 }
 
-function JobListItem({ job, selected, onSelect }: { job: JobFeedItem; selected: boolean; onSelect: () => void }) {
+function JobListItem({
+  job,
+  selected,
+  onSelect,
+  density,
+}: {
+  job: JobFeedItem;
+  selected: boolean;
+  onSelect: () => void;
+  density: FeedDensity;
+}) {
+  const nextAction = buildJobNextAction(job);
+  const compact = density === "compact";
+
   return (
     <Card
       className={cn(
@@ -631,7 +796,7 @@ function JobListItem({ job, selected, onSelect }: { job: JobFeedItem; selected: 
       aria-selected={selected}
       tabIndex={0}
     >
-      <CardContent className="px-3 py-2.5">
+      <CardContent className={cn("px-3", compact ? "py-1.5" : "py-2.5")}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 space-y-1">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -642,22 +807,27 @@ function JobListItem({ job, selected, onSelect }: { job: JobFeedItem; selected: 
               {job.company ?? "Unknown company"}
               {job.location && <> · {job.location}</>}
             </p>
-            <div className="flex flex-wrap gap-1">
-              {job.dealbreaker_violations.length > 0 && (
-                <Badge variant="outline" className="border-red-300 bg-red-50 px-1.5 py-0 text-[10px] text-red-700">
-                  Dealbreaker
-                </Badge>
-              )}
-              {job.overqualified && <Badge variant="outline" className="px-1.5 py-0 text-[10px]">Overqualified</Badge>}
-              {job.weighted_composite === null && isPendingStatus(job.status) && (
-                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Scoring</Badge>
-              )}
-              {isFailedStatus(job.status) && (
-                <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-                  {job.status === "fetch_failed" ? "Fetch Failed" : "Score Failed"}
-                </Badge>
-              )}
-            </div>
+            {!compact && job.summary && (
+              <p className="line-clamp-2 text-xs leading-5 text-foreground/75">{job.summary}</p>
+            )}
+            {!compact && (
+              <div className="flex flex-wrap gap-1">
+                {job.dealbreaker_violations.length > 0 && (
+                  <Badge variant="outline" className="border-red-300 bg-red-50 px-1.5 py-0 text-[10px] text-red-700 dark:border-destructive/40 dark:bg-destructive/10 dark:text-destructive">
+                    Dealbreaker
+                  </Badge>
+                )}
+                {job.overqualified && <Badge variant="outline" className="px-1.5 py-0 text-[10px]">Overqualified</Badge>}
+                {job.weighted_composite === null && isPendingStatus(job.status) && (
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Scoring</Badge>
+                )}
+                {isFailedStatus(job.status) && (
+                  <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                    {job.status === "fetch_failed" ? "Fetch Failed" : "Score Failed"}
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
             {job.weighted_composite !== null && (
@@ -665,234 +835,24 @@ function JobListItem({ job, selected, onSelect }: { job: JobFeedItem; selected: 
                 {Math.round(job.weighted_composite)}
               </Badge>
             )}
-            {job.posted_at && (
+            {!compact && job.posted_at && (
               <time className="whitespace-nowrap text-[10px] text-muted-foreground" dateTime={job.posted_at}>
                 {formatDate(job.posted_at)}
               </time>
+            )}
+            {!compact && (
+              <span className="whitespace-nowrap text-[10px] font-medium text-muted-foreground">{nextAction}</span>
+            )}
+            {compact && job.dealbreaker_violations.length > 0 && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px] border-red-300 bg-red-50 text-red-700 dark:border-destructive/40 dark:bg-destructive/10 dark:text-destructive">
+                Dealbreaker
+              </Badge>
             )}
           </div>
         </div>
       </CardContent>
     </Card>
   );
-}
-
-function JobDetailPanel({
-  job,
-  reasoningOpen,
-  onReasoningOpenChange,
-  reasoning,
-  reasoningLoading,
-  reasoningError,
-}: {
-  job: JobDetail;
-  reasoningOpen: boolean;
-  onReasoningOpenChange: (open: boolean) => void;
-  reasoning: JobReasoning | null;
-  reasoningLoading: boolean;
-  reasoningError: string | null;
-}) {
-  const dimensions = buildDimensionRows(job);
-
-  return (
-    <div className="max-h-[680px] overflow-y-auto">
-      <div className="space-y-6 p-6">
-        <header className="space-y-2">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="text-xl font-semibold tracking-tight">{job.title}</h2>
-              <p className="text-sm text-muted-foreground">
-                {job.company ?? "Unknown company"}
-                {job.location && <> · {job.location}</>}
-              </p>
-            </div>
-            {job.url && (
-              <Button variant="outline" size="sm" asChild>
-                <a href={job.url} target="_blank" rel="noreferrer">Open Posting</a>
-              </Button>
-            )}
-          </div>
-        </header>
-
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Fit Score</p>
-              <p className="text-5xl font-semibold tracking-tight">
-                {job.weighted_composite !== null ? Math.round(job.weighted_composite) : "--"}
-              </p>
-            </div>
-            {job.score_group && <Badge className={scoreBadgeClass(job.score_group)}>{scoreGroupLabel(job.score_group)}</Badge>}
-            {job.status === "fetch_failed" && <Badge variant="outline">Fetch Failed</Badge>}
-            {job.status === "score_failed" && <Badge variant="outline">Score Failed</Badge>}
-          </div>
-
-          {job.overqualified && (
-            <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-              This role appears below your current seniority. Treat the score as a fit signal, not a level match.
-            </div>
-          )}
-
-          {job.dealbreaker_violations.length > 0 && (
-            <div className="space-y-2 border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="border-red-300 bg-background/70 text-red-700">Dealbreaker</Badge>
-                <p className="font-medium">Profile dealbreaker violated</p>
-              </div>
-              <ul className="space-y-1">
-                {job.dealbreaker_violations.map((violation) => (
-                  <li key={`${violation.dealbreaker}-${violation.reason}`} className="text-xs leading-5">
-                    <span className="font-medium">{violation.dealbreaker}:</span> {violation.reason}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {job.summary && <p className="max-w-3xl text-sm text-foreground/90">{job.summary}</p>}
-        </section>
-
-        <section className="space-y-3">
-          <h3 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Dimension Scores</h3>
-          <div className="space-y-3">
-            {dimensions.map((row) => (
-              <DimensionProgress key={row.key} row={row} />
-            ))}
-          </div>
-        </section>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <InsightSection title="Matches" items={job.matches} tone="match" emptyText="No structured matches saved yet." />
-          <InsightSection title="Gaps" items={job.gaps} tone="gap" emptyText="No structured gaps saved yet." />
-        </div>
-
-        <section className="space-y-3">
-          <h3 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Job Description</h3>
-          {job.description ? (
-            <ReactMarkdown
-              components={{
-                p: ({ children }) => <p className="mb-3 text-sm leading-6 text-foreground/90 last:mb-0">{children}</p>,
-                ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 text-sm leading-6 text-foreground/90">{children}</ul>,
-                ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm leading-6 text-foreground/90">{children}</ol>,
-                li: ({ children }) => <li>{children}</li>,
-                strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-              }}
-            >
-              {job.description}
-            </ReactMarkdown>
-          ) : (
-            <p className="text-sm text-muted-foreground">No full description saved for this job yet.</p>
-          )}
-        </section>
-
-        <Collapsible open={reasoningOpen} onOpenChange={onReasoningOpenChange}>
-          <section className="border border-border">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" className="flex w-full justify-between rounded-none px-3 py-2 text-left">
-                <span>View reasoning</span>
-                <ChevronDown className={cn("size-4 transition-transform", reasoningOpen && "rotate-180")} />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="space-y-3 border-t border-border p-3">
-                {reasoningLoading && <p className="text-sm text-muted-foreground">Loading reasoning…</p>}
-                {!reasoningLoading && reasoningError && <p className="text-sm text-destructive">{reasoningError}</p>}
-                {!reasoningLoading && !reasoningError && !reasoning && (
-                  <p className="text-sm text-muted-foreground">No reasoning payload has been saved for this job yet.</p>
-                )}
-                {!reasoningLoading && !reasoningError && reasoning && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">Model: {reasoning.model}</p>
-                    <ReasoningBlock title="Prompt" value={reasoning.prompt} />
-                    <ReasoningBlock title="Response" value={reasoning.response} />
-                  </div>
-                )}
-              </div>
-            </CollapsibleContent>
-          </section>
-        </Collapsible>
-      </div>
-    </div>
-  );
-}
-
-function DimensionProgress({ row }: { row: DimensionRow }) {
-  const score = row.score ?? 0;
-
-  return (
-    <div className="grid grid-cols-[84px_minmax(0,1fr)_42px] items-center gap-3 text-sm">
-      <span className="text-muted-foreground">{row.label}</span>
-      <div className="h-2 overflow-hidden bg-muted">
-        <div className={cn("h-full", scoreFillClass(row.tone))} style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
-      </div>
-      <span className="text-right font-medium">{row.score ?? "--"}</span>
-    </div>
-  );
-}
-
-function InsightSection({
-  title,
-  items,
-  tone,
-  emptyText,
-}: {
-  title: string;
-  items: Array<Match | Gap>;
-  tone: "match" | "gap";
-  emptyText: string;
-}) {
-  return (
-    <section className={cn("space-y-3 border p-3", tone === "match" ? "border-emerald-200 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70")}>
-      <h3 className={cn("text-xs font-medium uppercase tracking-[0.18em]", tone === "match" ? "text-emerald-900" : "text-amber-950")}>
-        {title}
-      </h3>
-      {items.length > 0 ? (
-        <ul className="space-y-2">
-          {items.map((item) => (
-            <li key={`${item.skill}-${item.type}-${item.context}`} className="border border-background/80 bg-background/80 p-2 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-medium">{item.skill}</p>
-                <Badge variant="outline" className="px-1.5 py-0 text-[10px] capitalize">{item.type}</Badge>
-              </div>
-              <p className="mt-1 text-xs leading-5 text-foreground/80">{item.context}</p>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-muted-foreground">{emptyText}</p>
-      )}
-    </section>
-  );
-}
-
-function ReasoningBlock({ title, value }: { title: string; value: string }) {
-  return (
-    <section className="space-y-1">
-      <h4 className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{title}</h4>
-      <pre className="max-h-56 overflow-auto border border-border bg-muted/40 p-3 text-xs whitespace-pre-wrap break-words">
-        {value}
-      </pre>
-    </section>
-  );
-}
-
-function scoreBadgeClass(group: ScoreGroup | null): string {
-  if (group === "Top") return "bg-emerald-600 text-white hover:bg-emerald-600";
-  if (group === "Good") return "bg-amber-500 text-amber-950 hover:bg-amber-500";
-  return "bg-red-600 text-white hover:bg-red-600";
-}
-
-function scoreFillClass(tone: ScoreTone): string {
-  if (tone === "green") return "bg-emerald-600";
-  if (tone === "yellow") return "bg-amber-500";
-  if (tone === "red") return "bg-red-600";
-  return "bg-muted-foreground/30";
-}
-
-function scoreGroupLabel(group: ScoreGroup): string {
-  if (group === "Top") return "Top Match";
-  if (group === "Good") return "Good Match";
-  return "Other";
 }
 
 function formatDate(iso: string): string {

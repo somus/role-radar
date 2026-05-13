@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { OnboardingProgress } from "./OnboardingProgress";
 
 type Step = "enter-key" | "validating" | "ready";
 
@@ -27,15 +28,20 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-8">
-      <div className="max-w-lg w-full space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Role Radar Setup</h1>
-          <p className="text-muted-foreground mt-1 text-xs">Connect your AI engine</p>
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col justify-center gap-8 px-6 py-10">
+        <OnboardingProgress current="api" />
+
+        <div className="max-w-2xl space-y-2">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Local setup</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Connect Gemini to start scoring roles</h1>
+          <p className="max-w-xl text-sm leading-6 text-muted-foreground">
+            Role Radar keeps your profile and job feed local. The API key is only used for resume parsing, enrichment, and fit scoring.
+          </p>
         </div>
 
         {step === "enter-key" && (
-          <Card>
+          <Card className="max-w-xl">
             <CardHeader>
               <CardTitle>Gemini API Key</CardTitle>
               <CardDescription>
@@ -63,8 +69,13 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
               </div>
 
               {error && (
-                <p className="text-destructive text-xs">{error}</p>
+                <div className="border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  {error}
+                </div>
               )}
+              <p className="text-xs leading-5 text-muted-foreground">
+                Next: upload your resume, verify the extracted scoring profile, then run your first search.
+              </p>
             </CardContent>
             <CardFooter>
               <Button
@@ -80,25 +91,38 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
         )}
 
         {step === "validating" && (
-          <Card>
+          <Card className="max-w-xl">
             <CardContent className="py-8 text-center">
-              <p className="text-muted-foreground animate-pulse text-xs">Validating API key...</p>
+              <p className="text-sm font-medium">Validating API key</p>
+              <p className="mt-1 text-xs text-muted-foreground animate-pulse">Checking Gemini access before resume parsing starts…</p>
             </CardContent>
           </Card>
         )}
 
         {step === "ready" && (
-          <Card>
+          <Card className="max-w-xl">
             <CardContent className="py-8 text-center space-y-3">
-              <p className="text-primary text-3xl">✓</p>
+              <p className="text-primary text-3xl" aria-hidden="true">✓</p>
               <CardTitle>Ready to go</CardTitle>
               <p className="text-muted-foreground text-xs">
-                Using <span className="text-foreground font-medium">Gemini 2.5 Flash</span>
+                Gemini is connected. Resume upload is next.
               </p>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex flex-col gap-2">
               <Button onClick={onComplete} className="w-full" size="lg">
                 Get Started
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-muted-foreground"
+                onClick={() => {
+                  setApiKey("");
+                  setError(null);
+                  setStep("enter-key");
+                }}
+              >
+                Use a different key
               </Button>
             </CardFooter>
           </Card>

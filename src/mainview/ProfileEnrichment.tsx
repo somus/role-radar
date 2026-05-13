@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { electrobun } from "./electrobun";
 import { Button } from "@/components/ui/button";
@@ -6,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, FieldLabel } from "@/components/ui/field";
-import type { Profile, EnrichmentQuestion, EnrichmentAnswer } from "../shared/types";
+import { OnboardingProgress } from "./OnboardingProgress";
+import { useEnrichmentQuestions } from "./use-enrichment-questions";
+import type { Profile, EnrichmentAnswer } from "../shared/types";
 
 type Props = {
   profile: Profile;
@@ -15,119 +16,63 @@ type Props = {
   onSkip: () => void;
 };
 
-const pendingGenerations = new Set<number>();
-
 const CATEGORY_LABELS: Record<string, string> = {
   career_intent: "Career Intent",
   problem_solving: "Problem Solving",
   technical_depth: "Technical Depth",
 };
 
+const ENRICHMENT_ANSWER_MAX_CHARS = 5000;
+
 type FormValues = Record<string, string>;
 
 export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip }: Props) {
-  const [questions, setQuestions] = useState<EnrichmentQuestion[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [errorPhase, setErrorPhase] = useState<"generate" | "submit" | null>(null);
-  const questionsRef = useRef<EnrichmentQuestion[]>([]);
   const form = useForm<FormValues>({ defaultValues: {} });
   const watchedValues = form.watch();
   const hasAnswers = Object.values(watchedValues).some((v) => v.trim().length > 0);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    function handlePipelineEvent(e: Event) {
-      if (cancelled) return;
-      const { type, payload } = (e as CustomEvent).detail;
-
-      if (type === "enrichment:questions") {
-        const qs = payload.questions as EnrichmentQuestion[];
-        setQuestions(qs);
-        questionsRef.current = qs;
+  const enrichment = useEnrichmentQuestions(
+    profile,
+    forceRegenerate,
+    {
+      onQuestions: (qs) => {
         const defaults: FormValues = {};
         qs.forEach((_, i) => { defaults[`q${i}`] = ""; });
         form.reset(defaults);
 
+        if (forceRegenerate) return;
+
         electrobun.rpc.request.getEnrichmentAnswers({ profileId: profile.id }).then((saved) => {
-          if (cancelled || saved.length === 0) return;
+          if (saved.length === 0) return;
+          const answersByQuestion = new Map(saved.map((answer) => [answer.question, answer.answer]));
           const prefilled: FormValues = {};
           for (let i = 0; i < qs.length; i++) {
-            const match = saved.find((s) => s.question === qs[i]!.question);
-            prefilled[`q${i}`] = match?.answer ?? "";
+            prefilled[`q${i}`] = answersByQuestion.get(qs[i]!.question) ?? "";
           }
           form.reset(prefilled);
         }).catch((e) => { console.error("[enrichment] Failed to load saved answers:", e); });
-        setLoading(false);
-        pendingGenerations.delete(profile.id);
-      } else if (type === "enrichment:complete") {
-        pendingGenerations.delete(profile.id);
-        onComplete(payload.profile);
-      } else if (type === "enrichment:error") {
-        setError(payload.message);
-        setLoading(false);
-        setSubmitting(false);
-        setErrorPhase(questionsRef.current.length > 0 ? "submit" : "generate");
-      }
-    }
+      },
+      onComplete,
+    },
+    onSkip,
+  );
 
-    window.addEventListener("pipeline-update", handlePipelineEvent);
-
-    async function init() {
-      if (pendingGenerations.has(profile.id)) return;
-      pendingGenerations.add(profile.id);
-      try {
-        if (!forceRegenerate) {
-          const existing = await electrobun.rpc.request.getEnrichmentAnswers({ profileId: profile.id });
-          if (existing.length > 0 && !cancelled) {
-            pendingGenerations.delete(profile.id);
-            onSkip();
-            return;
-          }
-        }
-        electrobun.rpc.send.generateEnrichmentQuestions({ profileId: profile.id });
-      } catch (e: any) {
-        if (!cancelled) {
-          setError(e.message ?? "Failed to start question generation");
-          setLoading(false);
-        }
-      }
-    }
-
-    init();
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener("pipeline-update", handlePipelineEvent);
-    };
-  }, [profile.id]);
-
-  function handleRetry() {
-    setError(null);
-    setErrorPhase(null);
-    pendingGenerations.delete(profile.id);
-    if (questions.length === 0) {
-      setLoading(true);
-      pendingGenerations.add(profile.id);
-      electrobun.rpc.send.generateEnrichmentQuestions({ profileId: profile.id });
-    } else {
-      form.handleSubmit(onSubmit)();
-    }
-  }
+  const { questions, loading, submitting, error, errorPhase, beginSubmit, retry } = enrichment;
 
   function onSubmit(data: FormValues) {
-    setSubmitting(true);
-    setError(null);
+    beginSubmit();
 
-    const enrichmentAnswers: EnrichmentAnswer[] = questions
-      .map((q, i) => ({
-        question: q.question,
-        answer: (data[`q${i}`] ?? "").trim(),
-        category: q.category,
-      }))
-      .filter((a) => a.answer.length > 0);
+    const enrichmentAnswers: EnrichmentAnswer[] = [];
+    for (let i = 0; i < questions.length; i++) {
+      const question = questions[i]!;
+      const answer = (data[`q${i}`] ?? "").trim();
+      if (answer.length === 0) continue;
+      enrichmentAnswers.push({
+        question: question.question,
+        answer,
+        category: question.category,
+      });
+    }
 
     electrobun.rpc.send.processEnrichmentAnswers({
       profileId: profile.id,
@@ -135,12 +80,25 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
     });
   }
 
+  function handleRetry() {
+    if (errorPhase === "submit") {
+      form.handleSubmit(onSubmit)();
+    } else {
+      retry("generate");
+    }
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <p className="text-muted-foreground animate-pulse">Generating questions from your profile...</p>
-          <p className="text-xs text-muted-foreground">This may take a moment with local models.</p>
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="mx-auto flex min-h-screen max-w-5xl flex-col justify-center gap-8 px-6 py-10">
+          <OnboardingProgress current="enrichment" />
+          <div className="max-w-xl border border-border bg-card p-5">
+            <p className="text-sm font-medium">Generating profile questions</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground animate-pulse">
+              Role Radar is turning your resume into targeted questions about goals, constraints, and concrete project stories.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -148,12 +106,20 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-2xl mx-auto py-12 px-6 space-y-8">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight">Enrichment Questions</h1>
-          <p className="text-sm text-muted-foreground">
-            Answer these questions to improve job matching accuracy. All questions are optional.
-          </p>
+      <div className="max-w-5xl mx-auto py-10 px-6 space-y-8">
+        <OnboardingProgress current="enrichment" />
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Profile context</p>
+            <h1 className="text-2xl font-semibold tracking-tight">Add the details your resume cannot show</h1>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              These answers improve ranking by capturing goals, hard constraints, and concrete stories. Empty answers are ignored.
+            </p>
+          </div>
+          <aside className="border border-border bg-muted/20 p-4 text-xs leading-5 text-muted-foreground">
+            Dealbreakers from this step can flag or hide otherwise high-scoring jobs, so use direct language like "no onsite" or "no agencies".
+          </aside>
         </div>
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -171,28 +137,43 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
                 <Controller
                   name={`q${i}`}
                   control={form.control}
-                  render={({ field }) => (
-                    <Field>
-                      <FieldLabel className="text-xs text-muted-foreground">{q.guided_prompt}</FieldLabel>
-                      <Textarea
-                        placeholder="Type your answer..."
-                        {...field}
-                        disabled={submitting}
-                        rows={3}
-                        className="resize-y"
-                      />
-                    </Field>
-                  )}
+                  render={({ field }) => {
+                    const length = field.value?.length ?? 0;
+                    const over = length > ENRICHMENT_ANSWER_MAX_CHARS;
+                    return (
+                      <Field>
+                        <FieldLabel className="text-xs text-muted-foreground">{q.guided_prompt}</FieldLabel>
+                        <Textarea
+                          placeholder="Type your answer…"
+                          {...field}
+                          disabled={submitting}
+                          rows={3}
+                          maxLength={ENRICHMENT_ANSWER_MAX_CHARS}
+                          className="resize-y max-h-96"
+                          aria-describedby={`q${i}-count`}
+                        />
+                        <p
+                          id={`q${i}-count`}
+                          className={`text-right text-[10px] tabular-nums ${over ? "text-destructive" : "text-muted-foreground"}`}
+                        >
+                          {length} / {ENRICHMENT_ANSWER_MAX_CHARS}
+                        </p>
+                      </Field>
+                    );
+                  }}
                 />
               </CardContent>
             </Card>
           ))}
 
           {error && (
-            <div className="space-y-2">
-              <p className="text-sm text-destructive">{error}</p>
+            <div className="space-y-2 border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-sm font-medium text-destructive">
+                {errorPhase === "submit" ? "Submitting answers failed" : "Generating questions failed"}
+              </p>
+              <p className="text-xs leading-5 text-destructive/90">{error}</p>
               <Button variant="outline" size="sm" type="button" onClick={handleRetry}>
-                Retry
+                {errorPhase === "submit" ? "Retry submission" : "Retry generation"}
               </Button>
             </div>
           )}
@@ -204,7 +185,7 @@ export function ProfileEnrichment({ profile, forceRegenerate, onComplete, onSkip
               type="submit"
               disabled={submitting || !hasAnswers}
             >
-              {submitting ? "Analyzing answers..." : "Submit Answers"}
+              {submitting ? "Analyzing answers…" : "Submit Answers"}
             </Button>
             <Button
               variant="ghost"

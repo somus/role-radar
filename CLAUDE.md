@@ -12,6 +12,15 @@ See `PRD.md` for full product requirements. See `CONTEXT.md` for domain language
 - **Dev**: `bun run dev` runs `vite build && electrobun dev --watch`.
 - **Path aliases**: `@/` → `src/mainview/` (configured in both vite.config.ts and tsconfig.json).
 
+## Frontend module layout
+
+Components stay focused on rendering. Logic and effect orchestration live in two seam types:
+
+- **View models (`*-view-model.ts`)**: pure functions that derive display strings, sections, chips, or row structures from domain types. Examples: `feed-view-model.ts`, `job-detail-view-model.ts`, `onboarding-flow.ts`. Unit-test these directly with `bun test` — they are fast and deterministic.
+- **Hooks (`use-*.ts`)**: encapsulate async, RPC, and pipeline-event wiring. Examples: `use-auto-search.ts`, `use-enrichment-questions.ts`, `use-job-reasoning.ts`. They expose a small state surface to their hosting component.
+
+When adding feature logic, prefer extending an existing view model or hook over inlining new state in a screen-level component.
+
 ## Commit rules
 
 - Never add `Co-Authored-By`, `Generated-By`, or any AI/agent attribution to commit messages.
