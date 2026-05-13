@@ -72,16 +72,16 @@ A local-first application that ingests a user's resume, builds a rich profession
 ### Modules
 
 1. **Gemini Client** — Wraps all LLM interaction via Gemini 2.5 Flash Lite REST API. Health check on startup. Inference with `responseJsonSchema` structured output + Zod validation + 3 retries with error feedback in prompt. Single interface: `infer(prompt, schema) → T`. API key stored encrypted in SQLite.
-2. **Resume Parser** — `@libpdf/core` for PDF text extraction. LLM parses text into structured Profile. Zod validates output. Interface: `parse(pdfBuffer) → Profile`.
+2. **Resume Parser** — `@libpdf/core` for PDF text extraction. LLM parses text into both the compact structured Profile and a full structured resume JSON artifact for later Typst rendering. Zod validates output. Interface: `parse(pdfBuffer) → { profile: Profile, resume: StructuredResume }`.
 3. **Profile Enrichment** — LLM generates 5 questions from parsed profile covering career intent + dealbreakers, problem-solving stories from past roles, and technical depth. Free-text answers with guided prompts. LLM extracts structured enrichment data. Re-answerable anytime from profile page. Interface: `generateQuestions(profile) → Question[]`, `enrichProfile(profile, answers) → EnrichedProfile`.
-4. **Profile Store** — CRUD for profiles in SQLite. On update (via PDF re-upload, form edit, or re-enrichment), triggers full pipeline re-run: regenerate queries → new search → re-score all jobs.
+4. **Profile Store** — CRUD for profiles in SQLite, including raw extracted resume text, original PDF path, and corrected structured resume JSON. On update (via PDF re-upload, form edit, or re-enrichment), triggers full pipeline re-run: regenerate queries → new search → re-score all jobs.
 5. **Query Generator** — LLM generates 3–5 structured search query objects (keywords, location, experience level) from profile. Code maps objects to LinkedIn API parameters. Interface: `generate(profile) → SearchQuery[]`.
 6. **LinkedIn Adapter** — Implements `JobSourceAdapter` interface. Search via `/jobs-guest/jobs/api/seeMoreJobPostings/search`, detail fetch via `/jobs/view/{jobId}`. HTML parsing with Cheerio using JSON-configurable selectors (not hardcoded). Validates parsed output — missing critical fields = `parse_failed` status. Conservative rate limiting: 2–3s delay between requests, exponential backoff (30s base) on 429/403, circuit-break after 5 failures via bunqueue.
 7. **Heuristic Scorer** — Pure function scoring title similarity to profile roles + location match to preferences + recency. Used internally to filter ~200 discovered jobs to top ~50 for LLM scoring. Never exposed to user. Interface: `score(job, profile) → number`.
 8. **LLM Scorer** — Multi-dimensional scoring on 4 axes: skills match, seniority match, domain relevance, location fit. Each axis scored individually by LLM. Outputs structured matches/gaps with `{skill, type: exact|inferred|partial, context}`. Overqualified flag when seniority mismatch detected. Full prompt + response stored as LLM Reasoning. Interface: `score(jobDetail, profile) → FitResult`.
 9. **Score Weights** — Pure function computing weighted composite from dimension scores. Default weights: 40% skills, 20% seniority, 15% domain, 25% location. User-adjustable via UI sliders. Changing weights re-computes all composites instantly without LLM re-run. Interface: `composite(dimensions, weights) → number`.
 10. **Job Pipeline** — Orchestrates bunqueue (embedded mode, SQLite-backed). Two queues: detail-fetch (concurrency ~5, dynamic based on hardware), LLM scoring (concurrency 1, dynamic). Manages job lifecycle state transitions (discovered → queued → fetching → scoring → ready | failed). Dedup: DB unique constraint on `job_id` + bunqueue dedup.
-11. **Resume Generator** — LLM rewrites existing resume bullets to emphasize skills matching a specific job. Does not fabricate experience. Rendered as PDF via `@react-pdf/renderer`. One template for MVP. Jobs with generated resumes flagged `resume_generated = true` for permanent retention. Interface: `generate(profile, jobDetail, fitResult) → PDFBuffer`.
+11. **Resume Generator** — LLM rewrites existing resume bullets to emphasize skills matching a specific job. Does not fabricate experience. Rendered as PDF via Typst using the `basic-resume` template. One template for MVP. Jobs with generated resumes flagged `resume_generated = true` for permanent retention. Interface: `generate(profile, structuredResume, jobDetail, fitResult) → PDFBuffer`.
 12. **Background Refresh** — Daily automatic re-query of job sources. Reuses query generator + LinkedIn adapter. Dedup prevents re-scoring existing jobs. New discoveries get "New" badge in feed.
 13. **RPC Layer** — Electrobun typed RPC handlers exposed to webview. Functions for: profile CRUD, resume upload, enrichment Q&A, job feed (paginated, filterable), settings (model selection, weights), resume generation trigger, pipeline status subscriptions.
 14. **Database Layer** — SQLite schema for jobs, profiles, scores, enrichment answers, LLM reasoning. 30-day TTL cleanup (skip jobs with `resume_generated = true`). Sequential numbered migrations run on startup.
@@ -179,7 +179,7 @@ Additional flags (not states): `resume_generated: boolean`, `is_new: boolean`.
 | Queue | bunqueue (embedded, SQLite-backed) |
 | DB | bun:sqlite |
 | PDF parse | @libpdf/core |
-| PDF gen | @react-pdf/renderer |
+| PDF gen | Typst via `basic-resume` |
 | LLM | Gemini 2.5 Flash Lite (cloud API, encrypted key) |
 | Frontend | React + Vite + Tailwind + shadcn/ui (in webview) |
 | Validation | Zod |

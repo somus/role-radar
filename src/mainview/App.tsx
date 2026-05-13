@@ -12,7 +12,6 @@ type AppState = "loading" | "setup" | "upload" | "review" | "enrichment" | "dash
 export function App() {
   const [state, setState] = useState<AppState>("loading");
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [resumeText, setResumeText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [enrichmentRegen, setEnrichmentRegen] = useState(false);
   const [reviewFromDashboard, setReviewFromDashboard] = useState(false);
@@ -35,8 +34,6 @@ export function App() {
         const existingProfile = await electrobun.rpc.request.getProfile();
         if (existingProfile) {
           setProfile(existingProfile);
-          const text = await electrobun.rpc.request.getResumeText();
-          setResumeText(text ?? "");
           setState("dashboard");
         } else {
           setState("upload");
@@ -76,8 +73,6 @@ export function App() {
             const existingProfile = await electrobun.rpc.request.getProfile();
             if (existingProfile) {
               setProfile(existingProfile);
-              const text = await electrobun.rpc.request.getResumeText();
-              setResumeText(text ?? "");
               setState("dashboard");
             } else {
               setState("upload");
@@ -94,10 +89,9 @@ export function App() {
   if (state === "upload") {
     return (
       <ResumeUpload
-        onComplete={(p, text) => {
+        onComplete={(p) => {
           if (!p) return;
           setProfile(p);
-          setResumeText(text);
           setState("review");
         }}
       />
@@ -114,7 +108,6 @@ export function App() {
     return (
       <ProfileReview
         profile={profile}
-        resumeText={resumeText}
         onSave={(updated) => {
           setProfile(updated);
           setReviewFromDashboard(false);
@@ -165,17 +158,10 @@ export function App() {
         profile={profile}
         autoStartSearch={autoStartSearch}
         onAutoStartConsumed={() => setAutoStartSearch(false)}
-        onEditProfile={async () => {
-          try {
-            setAutoStartSearch(false);
-            const text = await electrobun.rpc.request.getResumeText();
-            setResumeText(text ?? "");
-            setReviewFromDashboard(true);
-            setState("review");
-          } catch (e: any) {
-            setError(e.message ?? "Failed to load resume text");
-            setState("error");
-          }
+        onEditProfile={() => {
+          setAutoStartSearch(false);
+          setReviewFromDashboard(true);
+          setState("review");
         }}
         onEnrichment={() => {
           setAutoStartSearch(false);
@@ -185,7 +171,6 @@ export function App() {
         onReset={() => {
           setAutoStartSearch(false);
           setProfile(null);
-          setResumeText("");
           setState("upload");
         }}
       />

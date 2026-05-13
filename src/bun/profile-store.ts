@@ -1,11 +1,12 @@
 import type { Database } from "bun:sqlite";
-import type { Profile, ProfilePreferences, ResumeParseResult } from "../shared/types";
+import { StructuredResumeSchema, type Profile, type ProfilePreferences, type ResumeParseResult, type StructuredResume } from "../shared/types";
 
 export function storeProfile(
   db: Database,
   parsed: ResumeParseResult,
   resumeText: string,
-  resumePdfPath?: string
+  resumePdfPath?: string,
+  resumeJson?: StructuredResume
 ): number {
   const existing = db.query("SELECT id FROM profiles LIMIT 1").get() as { id: number } | null;
 
@@ -13,7 +14,7 @@ export function storeProfile(
     db.query(
       `UPDATE profiles SET roles = ?, skills_primary = ?, skills_secondary = ?,
        experience_years = ?, seniority = ?, domains = ?, preferences = ?,
-       resume_text = ?, resume_pdf_path = ?, updated_at = datetime('now')
+       resume_text = ?, resume_pdf_path = ?, resume_json = ?, updated_at = datetime('now')
        WHERE id = ?`
     ).run(
       JSON.stringify(parsed.roles),
@@ -25,6 +26,7 @@ export function storeProfile(
       JSON.stringify(parsed.preferences),
       resumeText,
       resumePdfPath ?? null,
+      resumeJson ? JSON.stringify(resumeJson) : null,
       existing.id
     );
     return existing.id;
@@ -32,8 +34,8 @@ export function storeProfile(
 
   const result = db
     .query(
-      `INSERT INTO profiles (roles, skills_primary, skills_secondary, experience_years, seniority, domains, preferences, resume_text, resume_pdf_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO profiles (roles, skills_primary, skills_secondary, experience_years, seniority, domains, preferences, resume_text, resume_pdf_path, resume_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       JSON.stringify(parsed.roles),
@@ -44,7 +46,8 @@ export function storeProfile(
       JSON.stringify(parsed.domains),
       JSON.stringify(parsed.preferences),
       resumeText,
-      resumePdfPath ?? null
+      resumePdfPath ?? null,
+      resumeJson ? JSON.stringify(resumeJson) : null
     );
 
   return Number(result.lastInsertRowid);
@@ -59,7 +62,8 @@ export function getProfile(db: Database): Profile | null {
 export function updateProfile(
   db: Database,
   fields: Partial<Pick<Profile, "roles" | "skills_primary" | "skills_secondary" | "experience_years" | "seniority" | "domains" | "preferences">>,
-  resumeText?: string
+  resumeText?: string,
+  resumeJson?: StructuredResume
 ): Profile {
   const profile = getProfile(db);
   if (!profile) throw new Error("No profile exists");
@@ -79,6 +83,7 @@ export function updateProfile(
        roles = ?, skills_primary = ?, skills_secondary = ?,
        experience_years = ?, seniority = ?, domains = ?, preferences = ?,
        resume_text = COALESCE(?, resume_text),
+       resume_json = COALESCE(?, resume_json),
        updated_at = datetime('now')
      WHERE id = ?`
   ).run(
@@ -90,6 +95,7 @@ export function updateProfile(
     JSON.stringify(merged.domains),
     JSON.stringify(merged.preferences),
     resumeText ?? null,
+    resumeJson ? JSON.stringify(resumeJson) : null,
     profile.id
   );
 
@@ -99,6 +105,12 @@ export function updateProfile(
 function safeParseJson<T>(value: unknown, fallback: T): T {
   if (typeof value !== "string" || !value) return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function safeParseResumeJson(value: unknown): StructuredResume | null {
+  const parsed = safeParseJson<unknown>(value, null);
+  const result = StructuredResumeSchema.safeParse(parsed);
+  return result.success ? result.data : null;
 }
 
 function deserializeProfile(row: Record<string, unknown>): Profile {
@@ -122,6 +134,7 @@ function deserializeProfile(row: Record<string, unknown>): Profile {
     dealbreakers: safeParseJson(row.dealbreakers, []),
     problem_solving_stories: safeParseJson(row.problem_solving_stories, []),
     technical_depth: safeParseJson(row.technical_depth, []),
+    resume_json: safeParseResumeJson(row.resume_json),
     created_at: (row.created_at as string) ?? "",
     updated_at: (row.updated_at as string) ?? "",
   };

@@ -14,6 +14,7 @@ const migrationSql = [
   readFileSync(join(import.meta.dir, "../../../migrations/003_generated_queries_cache.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/004_job_status_index.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/005_feed_filters_dealbreakers.sql"), "utf-8"),
+  readFileSync(join(import.meta.dir, "../../../migrations/006_profile_resume_json.sql"), "utf-8"),
 ].join("\n");
 
 function freshDb(): Database {
@@ -36,6 +37,7 @@ const profile: Profile = {
   dealbreakers: [],
   problem_solving_stories: [],
   technical_depth: [],
+  resume_json: null,
   created_at: "",
   updated_at: "",
 };

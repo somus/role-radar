@@ -1,5 +1,8 @@
 import type { GeminiClient } from "./gemini-client";
-import { ResumeParseResultSchema, type ResumeParseResult } from "../shared/types";
+import {
+  ResumeUploadParseResultSchema,
+  type ResumeUploadParseResult,
+} from "../shared/types";
 
 export async function extractText(pdfBytes: Uint8Array): Promise<string> {
   const { writeFileSync, unlinkSync } = await import("fs");
@@ -31,17 +34,25 @@ export async function extractText(pdfBytes: Uint8Array): Promise<string> {
 const PARSE_PROMPT = `You are a resume parser. Extract structured data from the following resume text.
 
 Rules:
-- roles: job titles the person targets or has held (e.g., "Backend Engineer", "Staff SRE")
-- skills_primary: core technical skills prominently featured
-- skills_secondary: supporting skills mentioned less prominently
-- experience_years: total years of professional experience (integer)
-- seniority: one of exactly: "Junior", "Mid", "Senior", "Staff", "Principal", "Executive"
-- domains: industries or verticals (e.g., "Fintech", "Healthcare", "AdTech")
-- preferences.locations: cities/regions mentioned in resume header or context
-- preferences.remote: true if resume mentions remote work preference, false otherwise
-- preferences.country: infer the country from locations/address in resume (e.g., "India", "United States", "Germany"). null if cannot be determined
-- preferences.min_salary: always null (cannot be inferred from resume)
-- preferences.company_sizes: always empty array (cannot be inferred from resume)
+- Return a JSON object with exactly two top-level keys: profile and resume.
+- profile.roles: job titles the person targets or has held (e.g., "Backend Engineer", "Staff SRE")
+- profile.skills_primary: core technical skills prominently featured
+- profile.skills_secondary: supporting skills mentioned less prominently
+- profile.experience_years: total years of professional experience (integer)
+- profile.seniority: one of exactly: "Junior", "Mid", "Senior", "Staff", "Principal", "Executive"
+- profile.domains: industries or verticals (e.g., "Fintech", "Healthcare", "AdTech")
+- profile.preferences.locations: cities/regions mentioned in resume header or context
+- profile.preferences.remote: true if resume mentions remote work preference, false otherwise
+- profile.preferences.country: infer the country from locations/address in resume (e.g., "India", "United States", "Germany"). null if cannot be determined
+- profile.preferences.min_salary: always null (cannot be inferred from resume)
+- profile.preferences.company_sizes: always empty array (cannot be inferred from resume)
+- resume must preserve the whole renderable resume for later Typst generation.
+- Use empty strings for missing scalar resume fields and empty arrays for missing optional sections.
+- Put GitHub, LinkedIn, and personal website URLs in resume.contact.github, resume.contact.linkedin, and resume.contact.personal_site when present.
+- Put other contact links in resume.contact.links.
+- Preserve company names, job titles, institutions, dates, links, and bullet claims exactly as written when possible.
+- Do not invent missing contact fields, roles, dates, metrics, skills, projects, certifications, or education.
+- section_order should list the resume sections in the order they appear, using these keys where present: contact, summary, experience, skills, education, projects, certifications, extracurriculars, additional_sections.
 
 Resume text:
 `;
@@ -49,6 +60,6 @@ Resume text:
 export async function parseResume(
   text: string,
   gemini: GeminiClient
-): Promise<ResumeParseResult> {
-  return gemini.infer(PARSE_PROMPT + text, ResumeParseResultSchema);
+): Promise<ResumeUploadParseResult> {
+  return gemini.infer(PARSE_PROMPT + text, ResumeUploadParseResultSchema);
 }

@@ -14,6 +14,7 @@ const migrationSql = [
   readFileSync(join(import.meta.dir, "../../../migrations/003_generated_queries_cache.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/004_job_status_index.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/005_feed_filters_dealbreakers.sql"), "utf-8"),
+  readFileSync(join(import.meta.dir, "../../../migrations/006_profile_resume_json.sql"), "utf-8"),
 ].join("\n");
 
 const profile: Profile = {
@@ -35,6 +36,7 @@ const profile: Profile = {
   dealbreakers: ["No onsite-only"],
   problem_solving_stories: ["Improved queue reliability"],
   technical_depth: ["Distributed systems"],
+  resume_json: null,
   created_at: "",
   updated_at: "",
 };

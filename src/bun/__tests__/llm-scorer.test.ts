@@ -43,6 +43,7 @@ const baseProfile: Profile = {
   dealbreakers: ["No onsite-only"],
   problem_solving_stories: ["Scaled an internal job ingestion pipeline."],
   technical_depth: ["Distributed systems", "SQL query tuning"],
+  resume_json: null,
   created_at: "",
   updated_at: "",
 };

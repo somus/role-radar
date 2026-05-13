@@ -15,6 +15,7 @@ const baseProfile: Profile = {
   dealbreakers: [],
   problem_solving_stories: [],
   technical_depth: [],
+  resume_json: null,
   created_at: "",
   updated_at: "",
 };

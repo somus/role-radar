@@ -27,10 +27,95 @@ export const ResumeParseResultSchema = z.object({
 
 export type ResumeParseResult = z.infer<typeof ResumeParseResultSchema>;
 
+export const StructuredResumeSchema = z.object({
+  contact: z.object({
+    name: z.string(),
+    email: z.string(),
+    phone: z.string(),
+    location: z.string(),
+    github: z.string().default(""),
+    linkedin: z.string().default(""),
+    personal_site: z.string().default(""),
+    links: z.array(z.object({
+      label: z.string(),
+      url: z.string(),
+    })).default([]),
+  }),
+  summary: z.string(),
+  experience: z.array(z.object({
+    company: z.string(),
+    title: z.string(),
+    location: z.string(),
+    start_date: z.string(),
+    end_date: z.string(),
+    current: z.boolean(),
+    bullets: z.array(z.string()).default([]),
+  })),
+  skills: z.array(z.object({
+    category: z.string(),
+    items: z.array(z.string()).default([]),
+  })),
+  education: z.array(z.object({
+    institution: z.string(),
+    degree: z.string(),
+    field: z.string(),
+    gpa: z.string().default(""),
+    location: z.string(),
+    start_date: z.string(),
+    end_date: z.string(),
+    details: z.array(z.string()).default([]),
+  })),
+  projects: z.array(z.object({
+    name: z.string(),
+    role: z.string(),
+    url: z.string(),
+    start_date: z.string(),
+    end_date: z.string(),
+    bullets: z.array(z.string()).default([]),
+    technologies: z.array(z.string()).default([]),
+  })).default([]),
+  certifications: z.array(z.object({
+    name: z.string(),
+    issuer: z.string(),
+    date: z.string(),
+    url: z.string(),
+  })).default([]),
+  extracurriculars: z.array(z.object({
+    activity: z.string(),
+    start_date: z.string(),
+    end_date: z.string(),
+    bullets: z.array(z.string()).default([]),
+  })).default([]),
+  additional_sections: z.array(z.object({
+    title: z.string(),
+    items: z.array(z.string()).default([]),
+  })).default([]),
+  section_order: z.array(z.enum([
+    "contact",
+    "summary",
+    "experience",
+    "skills",
+    "education",
+    "projects",
+    "certifications",
+    "extracurriculars",
+    "additional_sections",
+  ])).default(["contact", "summary", "experience", "skills", "education"]),
+});
+
+export const ResumeUploadParseResultSchema = z.object({
+  profile: ResumeParseResultSchema,
+  resume: StructuredResumeSchema,
+});
+
+export type StructuredResume = z.infer<typeof StructuredResumeSchema>;
+export type ResumeUploadParseResult = z.infer<typeof ResumeUploadParseResultSchema>;
+
 
 export type UploadResumeResult = {
   profile: Profile;
   resumeText: string;
+  resumeJson: StructuredResume | null;
 };
 
 export type PipelineEvent =
@@ -72,6 +157,7 @@ export type PipelineEvent =
 type UpdateProfileParams = {
   fields: Partial<Pick<Profile, "roles" | "skills_primary" | "skills_secondary" | "experience_years" | "seniority" | "domains" | "preferences">>;
   resumeText?: string;
+  resumeJson?: StructuredResume;
 };
 
 export type AppRPCSchema = {
@@ -80,6 +166,7 @@ export type AppRPCSchema = {
       getHealth: { params: undefined; response: { gemini: boolean; db: boolean } };
       getProfile: { params: undefined; response: Profile | null };
       getResumeText: { params: undefined; response: string | null };
+      getResumeJson: { params: undefined; response: StructuredResume | null };
       resetProfile: { params: undefined; response: void };
       updateProfile: { params: UpdateProfileParams; response: Profile };
       runMigrations: { params: undefined; response: { applied: number } };
@@ -129,6 +216,7 @@ export type Profile = {
   dealbreakers: string[];
   problem_solving_stories: string[];
   technical_depth: string[];
+  resume_json: StructuredResume | null;
   created_at: string;
   updated_at: string;
 };

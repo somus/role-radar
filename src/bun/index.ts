@@ -1,5 +1,5 @@
 import { BrowserWindow, BrowserView, Utils } from "electrobun/bun";
-import type { AppRPCSchema, SearchQuery } from "../shared/types";
+import { StructuredResumeSchema, type AppRPCSchema, type SearchQuery } from "../shared/types";
 import { getDb, runMigrations, closeDb } from "./db";
 import { GeminiClient } from "./gemini-client";
 import { extractText, parseResume } from "./resume-parser";
@@ -261,6 +261,18 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
           .get() as { resume_text: string } | null;
         return row?.resume_text ?? null;
       },
+      getResumeJson: () => {
+        const row = getDb()
+          .query("SELECT resume_json FROM profiles LIMIT 1")
+          .get() as { resume_json: string | null } | null;
+        if (!row?.resume_json) return null;
+        try {
+          const parsed = StructuredResumeSchema.safeParse(JSON.parse(row.resume_json));
+          return parsed.success ? parsed.data : null;
+        } catch {
+          return null;
+        }
+      },
       resetProfile: () => {
         const db = getDb();
         db.query("DELETE FROM scores").run();
@@ -271,8 +283,8 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
         db.query("DELETE FROM jobs").run();
         db.query("DELETE FROM profiles").run();
       },
-      updateProfile: ({ fields, resumeText }) => {
-        const updated = updateProfile(getDb(), fields, resumeText);
+      updateProfile: ({ fields, resumeText, resumeJson }) => {
+        const updated = updateProfile(getDb(), fields, resumeText, resumeJson);
         void invalidateAndRescore(updated).catch((err: any) => {
           console.error("[score] re-score after profile update failed:", err?.message ?? String(err));
         });
@@ -566,7 +578,7 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
           } catch (fileErr: any) {
             throw new Error(`Failed to save resume PDF: ${fileErr.message}`);
           }
-          storeProfile(getDb(), parsed, resumeText, pdfDest);
+          storeProfile(getDb(), parsed.profile, resumeText, pdfDest, parsed.resume);
           console.log(`[resume] Stored (${((performance.now() - t) / 1000).toFixed(1)}s)`);
 
           const profile = getProfile(getDb())!;

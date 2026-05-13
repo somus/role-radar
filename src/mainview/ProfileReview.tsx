@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, type FieldPath, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v4";
 import { electrobun } from "./electrobun";
 import { TagInput, type Tag } from "emblor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -25,7 +26,8 @@ import {
   FieldError,
   FieldGroup,
 } from "@/components/ui/field";
-import type { Profile } from "../shared/types";
+import type { Profile, StructuredResume } from "../shared/types";
+import { StructuredResumeSchema } from "../shared/types";
 
 const SENIORITY_LEVELS = ["Junior", "Mid", "Senior", "Staff", "Principal", "Executive"] as const;
 
@@ -41,10 +43,12 @@ const profileFormSchema = z.object({
   country: z.string().nullable(),
   min_salary: z.number().nonnegative().nullable(),
   company_sizes: z.array(z.string()),
-  resumeText: z.string().min(1, "Resume text cannot be empty"),
+  resumeJson: StructuredResumeSchema,
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
+type ProfileForm = UseFormReturn<ProfileFormValues>;
+type ProfileFieldPath = FieldPath<ProfileFormValues>;
 
 function toTags(arr: string[] | undefined): Tag[] {
   return (arr ?? []).map((text) => ({ id: crypto.randomUUID(), text }));
@@ -53,18 +57,39 @@ function fromTags(tags: Tag[]): string[] {
   return tags.map((t) => t.text);
 }
 
+const EMPTY_RESUME_JSON: StructuredResume = {
+  contact: {
+    name: "",
+    email: "",
+    phone: "",
+    location: "",
+    github: "",
+    linkedin: "",
+    personal_site: "",
+    links: [],
+  },
+  summary: "",
+  experience: [],
+  skills: [],
+  education: [],
+  projects: [],
+  certifications: [],
+  extracurriculars: [],
+  additional_sections: [],
+  section_order: ["contact", "summary", "experience", "skills", "education"],
+};
+
 type Props = {
   profile: Profile;
-  resumeText: string;
   onSave: (profile: Profile) => void;
   onCancel?: () => void;
 };
 
-export function ProfileReview({ profile, resumeText, onSave, onCancel }: Props) {
+export function ProfileReview({ profile, onSave, onCancel }: Props) {
   const prefs = profile.preferences ?? {};
 
   const form = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileFormSchema),
+    resolver: zodResolver(profileFormSchema) as any,
     defaultValues: {
       roles: profile.roles ?? [],
       skills_primary: profile.skills_primary ?? [],
@@ -77,11 +102,10 @@ export function ProfileReview({ profile, resumeText, onSave, onCancel }: Props) 
       country: prefs.country ?? null,
       min_salary: prefs.min_salary ?? null,
       company_sizes: prefs.company_sizes ?? [],
-      resumeText,
+      resumeJson: profile.resume_json ?? EMPTY_RESUME_JSON,
     },
   });
 
-  const [rawTextOpen, setRawTextOpen] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   async function onSubmit(data: ProfileFormValues) {
@@ -103,7 +127,7 @@ export function ProfileReview({ profile, resumeText, onSave, onCancel }: Props) 
             company_sizes: data.company_sizes,
           },
         },
-        resumeText: data.resumeText,
+        resumeJson: data.resumeJson,
       });
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Save timed out. Please try again.")), 30_000)
@@ -117,9 +141,9 @@ export function ProfileReview({ profile, resumeText, onSave, onCancel }: Props) 
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-2xl mx-auto py-12 px-6 space-y-8">
+      <div className="max-w-4xl mx-auto py-12 px-6 space-y-8">
         <div className="space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight">Review Your Profile</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Review Your Profile</h1>
           <p className="text-sm text-muted-foreground">
             Verify and edit the information extracted from your resume.
           </p>
@@ -241,33 +265,7 @@ export function ProfileReview({ profile, resumeText, onSave, onCancel }: Props) 
             </FieldGroup>
           </div>
 
-          <Collapsible open={rawTextOpen} onOpenChange={setRawTextOpen}>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" type="button" className="text-muted-foreground">
-                {rawTextOpen ? "Hide" : "Show"} extracted resume text
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <Controller
-                name="resumeText"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid} className="mt-3">
-                    <FieldLabel className="text-xs text-muted-foreground">
-                      Edit below to fix OCR or extraction errors
-                    </FieldLabel>
-                    <textarea
-                      className="w-full min-h-64 p-4 text-xs font-mono bg-muted text-foreground rounded-lg border border-input resize-y focus:outline-none focus:ring-2 focus:ring-ring"
-                      value={field.value}
-                      onChange={field.onChange}
-                      aria-invalid={fieldState.invalid}
-                    />
-                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                  </Field>
-                )}
-              />
-            </CollapsibleContent>
-          </Collapsible>
+          <StructuredResumeEditor form={form} />
 
           {submitError && (
             <p className="text-sm text-destructive">{submitError}</p>
@@ -275,7 +273,7 @@ export function ProfileReview({ profile, resumeText, onSave, onCancel }: Props) 
 
           <div className="flex gap-3">
             <Button size="lg" className="flex-1" type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? "Saving..." : "Save Profile"}
+              {form.formState.isSubmitting ? "Saving..." : "Save and rescore jobs"}
             </Button>
             {onCancel && (
               <Button size="lg" variant="ghost" type="button" onClick={onCancel} disabled={form.formState.isSubmitting}>
@@ -295,10 +293,10 @@ function TagField({
   placeholder,
   form,
 }: {
-  name: keyof ProfileFormValues;
+  name: ProfileFieldPath;
   label: string;
   placeholder: string;
-  form: ReturnType<typeof useForm<ProfileFormValues>>;
+  form: ProfileForm;
 }) {
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
 
@@ -325,5 +323,645 @@ function TagField({
         </Field>
       )}
     />
+  );
+}
+
+function TextField({
+  name,
+  label,
+  form,
+  placeholder,
+}: {
+  name: ProfileFieldPath;
+  label: string;
+  form: ProfileForm;
+  placeholder?: string;
+}) {
+  return (
+    <Controller
+      name={name}
+      control={form.control}
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid}>
+          <FieldLabel>{label}</FieldLabel>
+          <Input
+            value={typeof field.value === "string" || typeof field.value === "number" ? field.value : ""}
+            onChange={field.onChange}
+            placeholder={placeholder}
+            aria-invalid={fieldState.invalid}
+          />
+          {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+        </Field>
+      )}
+    />
+  );
+}
+
+function TextAreaField({
+  name,
+  label,
+  form,
+  placeholder,
+  minHeight = "min-h-24",
+}: {
+  name: ProfileFieldPath;
+  label: string;
+  form: ProfileForm;
+  placeholder?: string;
+  minHeight?: string;
+}) {
+  return (
+    <Controller
+      name={name}
+      control={form.control}
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid}>
+          <FieldLabel>{label}</FieldLabel>
+          <Textarea
+            className={minHeight}
+            value={typeof field.value === "string" ? field.value : ""}
+            onChange={field.onChange}
+            placeholder={placeholder}
+            aria-invalid={fieldState.invalid}
+          />
+          {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+        </Field>
+      )}
+    />
+  );
+}
+
+function rowKey(prefix: string, index: number, ...parts: string[]) {
+  void parts;
+  return `${prefix}-${index}`;
+}
+
+function StructuredResumeEditor({
+  form,
+}: {
+  form: ProfileForm;
+}) {
+  const resume = form.watch("resumeJson");
+
+  function commitResume(next: StructuredResume | ((current: StructuredResume) => StructuredResume)) {
+    const current = form.getValues("resumeJson");
+    const resolved = typeof next === "function" ? next(current) : next;
+    form.setValue("resumeJson", resolved, { shouldDirty: true, shouldValidate: true });
+  }
+
+  function addExperience() {
+    commitResume((current) => ({
+      ...current,
+      experience: [
+        ...current.experience,
+        { company: "", title: "", location: "", start_date: "", end_date: "", current: false, bullets: [""] },
+      ],
+    }));
+  }
+
+  function removeExperience(index: number) {
+    commitResume((current) => ({ ...current, experience: current.experience.filter((_, i) => i !== index) }));
+  }
+
+  function addExperienceBullet(index: number) {
+    commitResume((current) => ({
+      ...current,
+      experience: current.experience.map((item, i) =>
+        i === index ? { ...item, bullets: [...item.bullets, ""] } : item
+      ),
+    }));
+  }
+
+  function removeExperienceBullet(index: number, bulletIndex: number) {
+    commitResume((current) => ({
+      ...current,
+      experience: current.experience.map((item, i) =>
+        i === index ? { ...item, bullets: item.bullets.filter((_, b) => b !== bulletIndex) } : item
+      ),
+    }));
+  }
+
+  function addSkillGroup() {
+    commitResume((current) => ({ ...current, skills: [...current.skills, { category: "", items: [] }] }));
+  }
+
+  function removeSkillGroup(index: number) {
+    commitResume((current) => ({ ...current, skills: current.skills.filter((_, i) => i !== index) }));
+  }
+
+  function addEducation() {
+    commitResume((current) => ({
+      ...current,
+      education: [
+        ...current.education,
+        { institution: "", degree: "", field: "", gpa: "", location: "", start_date: "", end_date: "", details: [] },
+      ],
+    }));
+  }
+
+  function removeEducation(index: number) {
+    commitResume((current) => ({ ...current, education: current.education.filter((_, i) => i !== index) }));
+  }
+
+  function addProject() {
+    commitResume((current) => ({
+      ...current,
+      projects: [
+        ...current.projects,
+        { name: "", role: "", url: "", start_date: "", end_date: "", bullets: [""], technologies: [] },
+      ],
+    }));
+  }
+
+  function removeProject(index: number) {
+    commitResume((current) => ({ ...current, projects: current.projects.filter((_, i) => i !== index) }));
+  }
+
+  function addProjectBullet(index: number) {
+    commitResume((current) => ({
+      ...current,
+      projects: current.projects.map((item, i) =>
+        i === index ? { ...item, bullets: [...item.bullets, ""] } : item
+      ),
+    }));
+  }
+
+  function removeProjectBullet(index: number, bulletIndex: number) {
+    commitResume((current) => ({
+      ...current,
+      projects: current.projects.map((item, i) =>
+        i === index ? { ...item, bullets: item.bullets.filter((_, b) => b !== bulletIndex) } : item
+      ),
+    }));
+  }
+
+  function addCertification() {
+    commitResume((current) => ({
+      ...current,
+      certifications: [...current.certifications, { name: "", issuer: "", date: "", url: "" }],
+    }));
+  }
+
+  function removeCertification(index: number) {
+    commitResume((current) => ({
+      ...current,
+      certifications: current.certifications.filter((_, i) => i !== index),
+    }));
+  }
+
+  function addExtracurricular() {
+    commitResume((current) => ({
+      ...current,
+      extracurriculars: [
+        ...current.extracurriculars,
+        { activity: "", start_date: "", end_date: "", bullets: [""] },
+      ],
+    }));
+  }
+
+  function removeExtracurricular(index: number) {
+    commitResume((current) => ({
+      ...current,
+      extracurriculars: current.extracurriculars.filter((_, i) => i !== index),
+    }));
+  }
+
+  function addExtracurricularBullet(index: number) {
+    commitResume((current) => ({
+      ...current,
+      extracurriculars: current.extracurriculars.map((item, i) =>
+        i === index ? { ...item, bullets: [...item.bullets, ""] } : item
+      ),
+    }));
+  }
+
+  function removeExtracurricularBullet(index: number, bulletIndex: number) {
+    commitResume((current) => ({
+      ...current,
+      extracurriculars: current.extracurriculars.map((item, i) =>
+        i === index ? { ...item, bullets: item.bullets.filter((_, b) => b !== bulletIndex) } : item
+      ),
+    }));
+  }
+
+  function addAdditionalSection() {
+    commitResume((current) => ({
+      ...current,
+      additional_sections: [...current.additional_sections, { title: "", items: [] }],
+    }));
+  }
+
+  function removeAdditionalSection(index: number) {
+    commitResume((current) => ({
+      ...current,
+      additional_sections: current.additional_sections.filter((_, i) => i !== index),
+    }));
+  }
+
+  return (
+    <div className="border-t pt-6 space-y-6">
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold">Resume Fields</h2>
+        <p className="text-xs text-muted-foreground">
+          Correct the structured resume content used for future tailored PDFs.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold">Contact</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <TextField name="resumeJson.contact.name" label="Name" form={form} />
+          <TextField name="resumeJson.contact.email" label="Email" form={form} />
+          <TextField name="resumeJson.contact.phone" label="Phone" form={form} />
+          <TextField name="resumeJson.contact.location" label="Location" form={form} />
+          <TextField name="resumeJson.contact.github" label="GitHub" form={form} />
+          <TextField name="resumeJson.contact.linkedin" label="LinkedIn" form={form} />
+          <TextField name="resumeJson.contact.personal_site" label="Personal Site" form={form} />
+        </div>
+        {resume.contact.links.map((link, index) => (
+          <div key={rowKey("link", index, link.label, link.url)} className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-3 items-end">
+            <TextField name={`resumeJson.contact.links.${index}.label`} label="Link Label" form={form} />
+            <TextField name={`resumeJson.contact.links.${index}.url`} label="URL" form={form} />
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                commitResume((current) => ({
+                  ...current,
+                  contact: {
+                    ...current.contact,
+                    links: current.contact.links.filter((_, i) => i !== index),
+                  },
+                }));
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            commitResume((current) => ({
+              ...current,
+              contact: {
+                ...current.contact,
+                links: [...current.contact.links, { label: "", url: "" }],
+              },
+            }));
+          }}
+        >
+          Add Link
+        </Button>
+      </div>
+
+      <TextAreaField
+        name="resumeJson.summary"
+        label="Summary"
+        form={form}
+        placeholder="Professional summary from the resume"
+      />
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">Experience</h3>
+          <Button type="button" variant="outline" onClick={addExperience}>Add Experience</Button>
+        </div>
+        {resume.experience.map((item, index) => (
+          <div key={rowKey("experience", index, item.company, item.title, item.start_date)} className="border border-border p-4 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {item.title || item.company || `Experience ${index + 1}`}
+              </p>
+              <Button type="button" variant="ghost" onClick={() => removeExperience(index)}>Remove</Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <TextField name={`resumeJson.experience.${index}.company`} label="Company" form={form} />
+              <TextField name={`resumeJson.experience.${index}.title`} label="Title" form={form} />
+              <TextField name={`resumeJson.experience.${index}.location`} label="Location" form={form} />
+              <TextField name={`resumeJson.experience.${index}.start_date`} label="Start Date" form={form} />
+              <TextField name={`resumeJson.experience.${index}.end_date`} label="End Date" form={form} />
+              <Controller
+                name={`resumeJson.experience.${index}.current` as ProfileFieldPath}
+                control={form.control}
+                render={({ field }) => (
+                  <Field orientation="horizontal">
+                    <FieldLabel>Current Role</FieldLabel>
+                    <Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} />
+                  </Field>
+                )}
+              />
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <FieldLabel>Bullets</FieldLabel>
+                <Button type="button" variant="outline" onClick={() => addExperienceBullet(index)}>Add Bullet</Button>
+              </div>
+              {item.bullets.map((bullet, bulletIndex) => (
+                <div key={rowKey("experience-bullet", bulletIndex, bullet)} className="grid grid-cols-[1fr_auto] gap-3 items-start">
+                  <TextAreaField
+                    name={`resumeJson.experience.${index}.bullets.${bulletIndex}`}
+                    label={`Bullet ${bulletIndex + 1}`}
+                    form={form}
+                    minHeight="min-h-16"
+                  />
+                  <Button type="button" variant="ghost" onClick={() => removeExperienceBullet(index, bulletIndex)}>
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">Skills</h3>
+          <Button type="button" variant="outline" onClick={addSkillGroup}>Add Skill Group</Button>
+        </div>
+        {resume.skills.map((group, index) => (
+          <div key={rowKey("skills", index, group.category, group.items.join(","))} className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-3 items-end">
+            <TextField name={`resumeJson.skills.${index}.category`} label="Category" form={form} />
+            <TagField
+              name={`resumeJson.skills.${index}.items` as ProfileFieldPath}
+              label="Skills"
+              placeholder="Add skill..."
+              form={form}
+            />
+            <Button type="button" variant="ghost" onClick={() => removeSkillGroup(index)}>Remove</Button>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">Education</h3>
+          <Button type="button" variant="outline" onClick={addEducation}>Add Education</Button>
+        </div>
+        {resume.education.map((education, index) => (
+          <div key={rowKey("education", index, education.institution, education.degree)} className="border border-border p-4 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium text-muted-foreground">Education {index + 1}</p>
+              <Button type="button" variant="ghost" onClick={() => removeEducation(index)}>Remove</Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <TextField name={`resumeJson.education.${index}.institution`} label="Institution" form={form} />
+              <TextField name={`resumeJson.education.${index}.degree`} label="Degree" form={form} />
+              <TextField name={`resumeJson.education.${index}.field`} label="Field" form={form} />
+              <TextField name={`resumeJson.education.${index}.gpa`} label="GPA" form={form} />
+              <TextField name={`resumeJson.education.${index}.location`} label="Location" form={form} />
+              <TextField name={`resumeJson.education.${index}.start_date`} label="Start Date" form={form} />
+              <TextField name={`resumeJson.education.${index}.end_date`} label="End Date" form={form} />
+            </div>
+            <TagField
+              name={`resumeJson.education.${index}.details` as ProfileFieldPath}
+              label="Details"
+              placeholder="Add detail..."
+              form={form}
+            />
+          </div>
+        ))}
+      </div>
+
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" type="button" className="text-muted-foreground">
+            Show optional sections
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-4 space-y-6">
+          <OptionalProjects
+            form={form}
+            resume={resume}
+            addProject={addProject}
+            removeProject={removeProject}
+            addProjectBullet={addProjectBullet}
+            removeProjectBullet={removeProjectBullet}
+          />
+          <OptionalCertifications
+            form={form}
+            resume={resume}
+            addCertification={addCertification}
+            removeCertification={removeCertification}
+          />
+          <OptionalExtracurriculars
+            form={form}
+            resume={resume}
+            addExtracurricular={addExtracurricular}
+            removeExtracurricular={removeExtracurricular}
+            addExtracurricularBullet={addExtracurricularBullet}
+            removeExtracurricularBullet={removeExtracurricularBullet}
+          />
+          <AdditionalSections
+            form={form}
+            resume={resume}
+            addAdditionalSection={addAdditionalSection}
+            removeAdditionalSection={removeAdditionalSection}
+          />
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
+function OptionalProjects({
+  form,
+  resume,
+  addProject,
+  removeProject,
+  addProjectBullet,
+  removeProjectBullet,
+}: {
+  form: ProfileForm;
+  resume: StructuredResume;
+  addProject: () => void;
+  removeProject: (index: number) => void;
+  addProjectBullet: (index: number) => void;
+  removeProjectBullet: (index: number, bulletIndex: number) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">Projects</h3>
+        <Button type="button" variant="outline" onClick={addProject}>Add Project</Button>
+      </div>
+      {resume.projects.map((project, index) => (
+        <div key={rowKey("project", index, project.name, project.role)} className="border border-border p-4 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-muted-foreground">Project {index + 1}</p>
+            <Button type="button" variant="ghost" onClick={() => removeProject(index)}>Remove</Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <TextField name={`resumeJson.projects.${index}.name`} label="Name" form={form} />
+            <TextField name={`resumeJson.projects.${index}.role`} label="Role" form={form} />
+            <TextField name={`resumeJson.projects.${index}.url`} label="URL" form={form} />
+            <TextField name={`resumeJson.projects.${index}.start_date`} label="Start Date" form={form} />
+            <TextField name={`resumeJson.projects.${index}.end_date`} label="End Date" form={form} />
+          </div>
+          <TagField
+            name={`resumeJson.projects.${index}.technologies` as ProfileFieldPath}
+            label="Technologies"
+            placeholder="Add technology..."
+            form={form}
+          />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <FieldLabel>Bullets</FieldLabel>
+              <Button type="button" variant="outline" onClick={() => addProjectBullet(index)}>
+                Add Bullet
+              </Button>
+            </div>
+          {resume.projects[index]?.bullets.map((bullet, bulletIndex) => (
+            <div key={rowKey("project-bullet", bulletIndex, bullet)} className="grid grid-cols-[1fr_auto] gap-3 items-start">
+              <TextAreaField
+                name={`resumeJson.projects.${index}.bullets.${bulletIndex}` as ProfileFieldPath}
+                label={`Bullet ${bulletIndex + 1}`}
+                form={form}
+                minHeight="min-h-16"
+              />
+              <Button type="button" variant="ghost" onClick={() => removeProjectBullet(index, bulletIndex)}>
+                Remove
+              </Button>
+            </div>
+          ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OptionalCertifications({
+  form,
+  resume,
+  addCertification,
+  removeCertification,
+}: {
+  form: ProfileForm;
+  resume: StructuredResume;
+  addCertification: () => void;
+  removeCertification: (index: number) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">Certifications</h3>
+        <Button type="button" variant="outline" onClick={addCertification}>Add Certification</Button>
+      </div>
+      {resume.certifications.map((certification, index) => (
+        <div key={rowKey("certification", index, certification.name, certification.issuer)} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 items-end">
+          <TextField name={`resumeJson.certifications.${index}.name`} label="Name" form={form} />
+          <TextField name={`resumeJson.certifications.${index}.issuer`} label="Issuer" form={form} />
+          <TextField name={`resumeJson.certifications.${index}.date`} label="Date" form={form} />
+          <TextField name={`resumeJson.certifications.${index}.url`} label="URL" form={form} />
+          <Button type="button" variant="ghost" onClick={() => removeCertification(index)}>Remove</Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OptionalExtracurriculars({
+  form,
+  resume,
+  addExtracurricular,
+  removeExtracurricular,
+  addExtracurricularBullet,
+  removeExtracurricularBullet,
+}: {
+  form: ProfileForm;
+  resume: StructuredResume;
+  addExtracurricular: () => void;
+  removeExtracurricular: (index: number) => void;
+  addExtracurricularBullet: (index: number) => void;
+  removeExtracurricularBullet: (index: number, bulletIndex: number) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">Extracurriculars</h3>
+        <Button type="button" variant="outline" onClick={addExtracurricular}>Add Extracurricular</Button>
+      </div>
+      {resume.extracurriculars.map((item, index) => (
+        <div key={rowKey("extracurricular", index, item.activity)} className="border border-border p-4 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              {item.activity || `Extracurricular ${index + 1}`}
+            </p>
+            <Button type="button" variant="ghost" onClick={() => removeExtracurricular(index)}>Remove</Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <TextField name={`resumeJson.extracurriculars.${index}.activity`} label="Activity" form={form} />
+            <TextField name={`resumeJson.extracurriculars.${index}.start_date`} label="Start Date" form={form} />
+            <TextField name={`resumeJson.extracurriculars.${index}.end_date`} label="End Date" form={form} />
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <FieldLabel>Bullets</FieldLabel>
+              <Button type="button" variant="outline" onClick={() => addExtracurricularBullet(index)}>
+                Add Bullet
+              </Button>
+            </div>
+            {item.bullets.map((bullet, bulletIndex) => (
+              <div key={rowKey("extracurricular-bullet", bulletIndex, bullet)} className="grid grid-cols-[1fr_auto] gap-3 items-start">
+                <TextAreaField
+                  name={`resumeJson.extracurriculars.${index}.bullets.${bulletIndex}`}
+                  label={`Bullet ${bulletIndex + 1}`}
+                  form={form}
+                  minHeight="min-h-16"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => removeExtracurricularBullet(index, bulletIndex)}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AdditionalSections({
+  form,
+  resume,
+  addAdditionalSection,
+  removeAdditionalSection,
+}: {
+  form: ProfileForm;
+  resume: StructuredResume;
+  addAdditionalSection: () => void;
+  removeAdditionalSection: (index: number) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">Additional Sections</h3>
+        <Button type="button" variant="outline" onClick={addAdditionalSection}>Add Section</Button>
+      </div>
+      {resume.additional_sections.map((section, index) => (
+        <div key={rowKey("additional-section", index, section.title)} className="border border-border p-4 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              {section.title || `Section ${index + 1}`}
+            </p>
+            <Button type="button" variant="ghost" onClick={() => removeAdditionalSection(index)}>Remove</Button>
+          </div>
+          <TextField name={`resumeJson.additional_sections.${index}.title` as ProfileFieldPath} label="Title" form={form} />
+          <TagField
+            name={`resumeJson.additional_sections.${index}.items` as ProfileFieldPath}
+            label="Items"
+            placeholder="Add item..."
+            form={form}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
