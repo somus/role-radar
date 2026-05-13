@@ -1,23 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, RotateCcw } from "lucide-react";
 import { electrobun } from "./electrobun";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { Gap, JobDetail, JobFeedItem, JobFeedResult, JobReasoning, Match, ScoreGroup } from "../shared/types";
+import type { FitWeights, Gap, JobDetail, JobFeedItem, JobFeedResult, JobReasoning, Match, ScoreGroup } from "../shared/types";
+import { DEFAULT_FIT_WEIGHTS, adjustWeights, type FitWeightKey } from "../shared/score-weights";
 import { buildDimensionRows, isSelectedDetailCurrent, type DimensionRow, type ScoreTone } from "./job-detail-view-model";
+import { applyWeightsToJob, applyWeightsToJobFeed } from "./job-feed-rerank";
 import { buildJobFeedSections, isFailedStatus, isPendingStatus } from "./job-feed-sections";
 import { cn } from "@/lib/utils";
 
 const JOB_LIST_PAGE_SIZE = 200;
+const WEIGHT_SAVE_DEBOUNCE_MS = 350;
+
+type WeightSaveStatus = "saving" | "saved" | null;
 
 type Props = {
   profileId: number;
   refreshKey: number;
   hasSearched?: boolean;
 };
+
+const WEIGHT_ROWS: Array<{ key: FitWeightKey; label: string }> = [
+  { key: "skills", label: "Skills" },
+  { key: "seniority", label: "Seniority" },
+  { key: "domain", label: "Domain" },
+  { key: "location", label: "Location" },
+];
 
 export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
   const [jobs, setJobs] = useState<JobFeedItem[]>([]);
@@ -37,7 +49,13 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
   const [reasoningLoading, setReasoningLoading] = useState(false);
   const [reasoningError, setReasoningError] = useState<string | null>(null);
   const [reasoning, setReasoning] = useState<JobReasoning | null>(null);
+  const [weights, setWeights] = useState<FitWeights>(DEFAULT_FIT_WEIGHTS);
+  const [weightsError, setWeightsError] = useState<string | null>(null);
+  const [weightSaveStatus, setWeightSaveStatus] = useState<WeightSaveStatus>(null);
   const reasoningLoadedFor = useRef<number | null>(null);
+  const weightsRef = useRef<FitWeights>(DEFAULT_FIT_WEIGHTS);
+  const weightsSaveDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const weightsSaveVersion = useRef(0);
 
   const loadJobs = useCallback(async (pageOffset = 0, append = false) => {
     setLoading(true);
@@ -51,7 +69,10 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
       setOffset(pageOffset + result.jobs.length);
       setFailedCount(result.failedCount);
       setJobs((currentJobs) => {
-        const nextJobs = append ? [...currentJobs, ...result.jobs] : result.jobs;
+        const nextJobs = applyWeightsToJobFeed(
+          append ? [...currentJobs, ...result.jobs] : result.jobs,
+          weightsRef.current,
+        );
         setSelectedJobId((current) => {
           if (nextJobs.length === 0) return null;
           if (current && nextJobs.some((job) => job.id === current)) return current;
@@ -65,14 +86,80 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    void electrobun.rpc.request.getWeights()
+      .then((nextWeights) => {
+        if (cancelled) return;
+        weightsRef.current = nextWeights;
+        setWeights(nextWeights);
+        setWeightsError(null);
+        setWeightSaveStatus("saved");
+        setJobs((currentJobs) => applyWeightsToJobFeed(currentJobs, nextWeights));
+        setSelectedJob((currentJob) => currentJob ? applyWeightsToJob(currentJob, nextWeights) : currentJob);
+      })
+      .catch((e: any) => {
+        if (!cancelled) setWeightsError(e.message ?? "Failed to load scoring weights.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  useEffect(() => {
     void loadJobs(0, false);
   }, [refreshKey, loadJobs]);
 
   const reloadDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    return () => clearTimeout(reloadDebounce.current);
+    return () => {
+      clearTimeout(reloadDebounce.current);
+      clearTimeout(weightsSaveDebounce.current);
+    };
   }, []);
+
+  const persistWeights = useCallback((nextWeights: FitWeights) => {
+    const saveVersion = ++weightsSaveVersion.current;
+    clearTimeout(weightsSaveDebounce.current);
+    setWeightSaveStatus("saving");
+    weightsSaveDebounce.current = setTimeout(() => {
+      void electrobun.rpc.request.updateWeights(nextWeights)
+        .then((savedWeights) => {
+          if (saveVersion !== weightsSaveVersion.current) return;
+          weightsRef.current = savedWeights;
+          setWeights(savedWeights);
+          setWeightsError(null);
+          setWeightSaveStatus("saved");
+          setJobs((currentJobs) => applyWeightsToJobFeed(currentJobs, savedWeights));
+          setSelectedJob((currentJob) => currentJob ? applyWeightsToJob(currentJob, savedWeights) : currentJob);
+          void loadJobs(0, false);
+        })
+        .catch((e: any) => {
+          if (saveVersion !== weightsSaveVersion.current) return;
+          setWeightsError(e.message ?? "Failed to save scoring weights.");
+          setWeightSaveStatus(null);
+        });
+    }, WEIGHT_SAVE_DEBOUNCE_MS);
+  }, [loadJobs]);
+
+  const applyWeightChange = useCallback((key: FitWeightKey, value: number) => {
+    const nextWeights = adjustWeights(weightsRef.current, key, value);
+    weightsRef.current = nextWeights;
+    setWeights(nextWeights);
+    setWeightsError(null);
+    setJobs((currentJobs) => applyWeightsToJobFeed(currentJobs, nextWeights));
+    setSelectedJob((currentJob) => currentJob ? applyWeightsToJob(currentJob, nextWeights) : currentJob);
+    persistWeights(nextWeights);
+  }, [persistWeights]);
+
+  const resetWeights = useCallback(() => {
+    weightsRef.current = DEFAULT_FIT_WEIGHTS;
+    setWeights(DEFAULT_FIT_WEIGHTS);
+    setWeightsError(null);
+    setJobs((currentJobs) => applyWeightsToJobFeed(currentJobs, DEFAULT_FIT_WEIGHTS));
+    setSelectedJob((currentJob) => currentJob ? applyWeightsToJob(currentJob, DEFAULT_FIT_WEIGHTS) : currentJob);
+    persistWeights(DEFAULT_FIT_WEIGHTS);
+  }, [persistWeights]);
 
   useEffect(() => {
     function handlePipeline(e: Event) {
@@ -120,7 +207,7 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
           setDetailError("Job details are no longer available.");
           return;
         }
-        setSelectedJob(job);
+        setSelectedJob(applyWeightsToJob(job, weightsRef.current));
       })
       .catch((e: any) => {
         if (cancelled) return;
@@ -177,11 +264,20 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
 
   if (!loading && jobs.length === 0) {
     return (
-      <p className="py-4 text-center text-xs text-muted-foreground">
-        {hasSearched
-          ? "No jobs found. Try different keywords or broaden your filters."
-          : "No jobs yet. Run a search to discover jobs."}
-      </p>
+      <div className="space-y-3">
+        <ScoringWeightsPanel
+          weights={weights}
+          error={weightsError}
+          saveStatus={weightSaveStatus}
+          onWeightChange={applyWeightChange}
+          onReset={resetWeights}
+        />
+        <p className="py-4 text-center text-xs text-muted-foreground">
+          {hasSearched
+            ? "No jobs found. Try different keywords or broaden your filters."
+            : "No jobs yet. Run a search to discover jobs."}
+        </p>
+      </div>
     );
   }
 
@@ -228,6 +324,13 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
       <div className="grid min-h-[680px] overflow-hidden border border-border bg-background md:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)]">
         <aside className="min-h-0 border-b border-border md:border-b-0 md:border-r">
           <div className="max-h-[680px] space-y-4 overflow-y-auto p-3" role="listbox" aria-label="Jobs">
+            <ScoringWeightsPanel
+              weights={weights}
+              error={weightsError}
+              saveStatus={weightSaveStatus}
+              onWeightChange={applyWeightChange}
+              onReset={resetWeights}
+            />
             {loading && jobs.length === 0 && (
               <p className="py-4 text-center text-xs text-muted-foreground">Loading jobs…</p>
             )}
@@ -287,6 +390,69 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
         </main>
       </div>
     </div>
+  );
+}
+
+function ScoringWeightsPanel({
+  weights,
+  error,
+  saveStatus,
+  onWeightChange,
+  onReset,
+}: {
+  weights: FitWeights;
+  error: string | null;
+  saveStatus: WeightSaveStatus;
+  onWeightChange: (key: FitWeightKey, value: number) => void;
+  onReset: () => void;
+}) {
+  return (
+    <Collapsible defaultOpen={false}>
+      <section className="border border-border bg-muted/20">
+        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" className="group h-7 flex-1 justify-between rounded-none px-0 text-left text-xs font-medium">
+              <span>Scoring weights</span>
+              <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+            </Button>
+          </CollapsibleTrigger>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 rounded-none px-2"
+            onClick={onReset}
+            title="Reset to defaults"
+            aria-label="Reset scoring weights to defaults"
+          >
+            <RotateCcw className="size-3.5" />
+          </Button>
+        </div>
+        <CollapsibleContent>
+          <div className="space-y-3 p-3">
+            {WEIGHT_ROWS.map((row) => (
+              <label key={row.key} className="grid grid-cols-[70px_minmax(0,1fr)_34px] items-center gap-2 text-xs">
+                <span className="text-muted-foreground">{row.label}</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={weights[row.key]}
+                  onChange={(event) => onWeightChange(row.key, Number(event.currentTarget.value))}
+                  className="h-2 w-full cursor-pointer accent-primary"
+                />
+                <span className="text-right tabular-nums">{weights[row.key]}%</span>
+              </label>
+            ))}
+            {error ? (
+              <p className="text-xs text-destructive">{error}</p>
+            ) : saveStatus ? (
+              <p className="text-xs text-muted-foreground">{saveStatus === "saving" ? "Saving..." : "Saved"}</p>
+            ) : null}
+          </div>
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
   );
 }
 

@@ -11,6 +11,7 @@ import { LinkedInAdapter, searchCities } from "./linkedin-adapter";
 import { storeJobs, getJobFeed, getJobDetail, getJobReasoning, storeSearchQuery } from "./job-store";
 import { DetailFetchQueue, runHeuristicAndQueueDetails, type DetailEvent } from "./detail-fetch-queue";
 import { runScoringPipeline, resolveSelectedModel } from "./scoring-pipeline";
+import { getScoreWeights, updateScoreWeights } from "./score-weight-settings";
 import { storeSecret } from "./secret-store";
 import { API_KEY_NAME, getConfiguredGeminiKey, hasConfiguredGeminiKey } from "./gemini-config";
 import { invalidateScoresAndRequeueJobs } from "./scoring-state";
@@ -304,6 +305,12 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
       },
       getJobReasoning: ({ jobId }) => {
         return getJobReasoning(getDb(), jobId);
+      },
+      getWeights: () => {
+        return getScoreWeights(getDb());
+      },
+      updateWeights: (weights) => {
+        return updateScoreWeights(getDb(), weights);
       },
       searchCities: async ({ query }) => {
         return searchCities(query);

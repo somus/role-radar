@@ -89,6 +89,8 @@ export type AppRPCSchema = {
       getJobFeed: { params: JobFeedParams; response: JobFeedResult };
       getJobDetail: { params: { jobId: number }; response: JobDetail | null };
       getJobReasoning: { params: { jobId: number }; response: JobReasoning | null };
+      getWeights: { params: undefined; response: FitWeights };
+      updateWeights: { params: FitWeights; response: FitWeights };
       searchCities: { params: { query: string }; response: CityResult[] };
     };
     messages: {

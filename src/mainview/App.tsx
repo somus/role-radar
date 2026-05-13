@@ -25,10 +25,9 @@ export function App() {
   useEffect(() => {
     async function init() {
       try {
-        const health = await electrobun.rpc.request.getHealth();
         const hasKey = await electrobun.rpc.request.hasApiKey();
 
-        if (!health.gemini || !hasKey) {
+        if (!hasKey) {
           setState("setup");
           return;
         }

@@ -9,6 +9,7 @@ const DEFAULT_MODEL = GEMINI_FLASH;
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const MAX_RETRIES = 3;
 const TIMEOUT_MS = 120_000;
+const HEALTH_TIMEOUT_MS = 1_000;
 
 export class GeminiClient {
   constructor(
@@ -17,13 +18,25 @@ export class GeminiClient {
   ) {}
 
   async checkHealth(): Promise<boolean> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const res = await this.fetchFn(`${BASE_URL}/models/${DEFAULT_MODEL}`, {
+      const request = this.fetchFn(`${BASE_URL}/models/${DEFAULT_MODEL}`, {
+        signal: controller.signal,
         headers: { "x-goog-api-key": this.apiKey },
+      }).catch(() => null);
+      const timeout = new Promise<null>((resolve) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          resolve(null);
+        }, HEALTH_TIMEOUT_MS);
       });
-      return res.ok;
+      const res = await Promise.race([request, timeout]);
+      return res?.ok ?? false;
     } catch {
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

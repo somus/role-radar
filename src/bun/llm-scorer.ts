@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import type { FitResult, FitWeights, Job, MatchType, Profile } from "../shared/types";
+import { composite, dimensionsFromScoreFields } from "../shared/score-weights";
 
 const matchTypeSchema = z.enum(["exact", "inferred", "partial"] satisfies MatchType[]);
 
@@ -41,25 +42,11 @@ export type ScoreJobResult = {
   model: string;
 };
 
-const DEFAULT_WEIGHTS: FitWeights = {
-  skills: 40,
-  seniority: 20,
-  domain: 15,
-  location: 25,
-};
-
 export function calculateComposite(
   scores: Pick<FitResult, "skills_score" | "seniority_score" | "domain_score" | "location_score">,
-  weights: FitWeights = DEFAULT_WEIGHTS,
+  weights?: FitWeights,
 ): number {
-  return Number((
-    (
-      (scores.skills_score * weights.skills) +
-      (scores.seniority_score * weights.seniority) +
-      (scores.domain_score * weights.domain) +
-      (scores.location_score * weights.location)
-    ) / 100
-  ).toFixed(2));
+  return composite(dimensionsFromScoreFields(scores), weights);
 }
 
 export async function scoreJob(

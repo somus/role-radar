@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { Job, JobDetail, JobFeedItem, JobFeedParams, JobFeedResult, JobReasoning, ParsedJob, ParsedJobDetail, SearchQuery } from "../shared/types";
+import { scoreGroup } from "../shared/score-weights";
 
 export function storeJobs(
   db: Database,
@@ -239,13 +240,7 @@ function deserializeJobFeedItem(row: any): JobFeedItem {
     location_score: row.location_score ?? null,
     composite: row.composite ?? null,
     weighted_composite: weightedComposite,
-    score_group: weightedComposite == null
-      ? null
-      : weightedComposite >= 80
-        ? "Top"
-        : weightedComposite >= 65
-          ? "Good"
-          : "Others",
+    score_group: weightedComposite == null ? null : scoreGroup(weightedComposite),
     overqualified: row.overqualified == null ? null : !!row.overqualified,
     matches: safeParseJson(row.matches, []),
     gaps: safeParseJson(row.gaps, []),

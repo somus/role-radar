@@ -30,6 +30,30 @@ describe("GeminiClient", () => {
     expect(await client.checkHealth()).toBe(false);
   });
 
+  test("checkHealth returns false when health request times out", async () => {
+    mockFetch.mockImplementationOnce((_url: string, opts: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        opts.signal?.addEventListener("abort", () => {
+          const err = new Error("aborted");
+          err.name = "AbortError";
+          reject(err);
+        });
+      });
+    });
+
+    const started = performance.now();
+    expect(await client.checkHealth()).toBe(false);
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
+  test("checkHealth returns false even if fetch ignores abort and never settles", async () => {
+    mockFetch.mockImplementationOnce(() => new Promise(() => {}));
+
+    const started = performance.now();
+    expect(await client.checkHealth()).toBe(false);
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
   test("checkHealth passes API key in header", async () => {
     mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
     await client.checkHealth();

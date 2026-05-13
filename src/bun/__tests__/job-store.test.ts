@@ -15,6 +15,7 @@ import {
   setJobDetails,
   getTopNSetting,
 } from "../job-store";
+import { updateScoreWeights } from "../score-weight-settings";
 import type { ParsedJob, ParsedJobDetail } from "../../shared/types";
 
 const migrationSql = [
@@ -142,6 +143,49 @@ describe("getJobFeed", () => {
     const newJobs = result.jobs.filter(j => j.is_new);
     expect(newJobs.length).toBeGreaterThan(0);
     expect(result.jobs[0]!.is_new).toBe(true);
+  });
+
+  test("server-side weight changes can move a later-page job into the first page", () => {
+    db.query("DELETE FROM jobs").run();
+    db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
+      1,
+      JSON.stringify(["Backend Engineer"]),
+      "Senior",
+      JSON.stringify({ locations: [], remote: false, min_salary: null, company_sizes: [], country: null }),
+    );
+
+    const insertJob = db.query(
+      "INSERT INTO jobs (source, source_id, title, status, is_new) VALUES (?, ?, ?, ?, 0)"
+    );
+    const insertScore = db.query(
+      `INSERT INTO scores (
+        job_id, profile_id, skills_score, seniority_score, domain_score, location_score, composite, overqualified, matches, gaps
+      ) VALUES (?, 1, ?, ?, ?, ?, ?, 0, '[]', '[]')`
+    );
+
+    for (let i = 0; i < 200; i++) {
+      insertJob.run("linkedin", `skill_${i}`, `Skill-heavy ${i}`, "ready");
+      const jobId = (db.query("SELECT id FROM jobs WHERE source_id = ?").get(`skill_${i}`) as { id: number }).id;
+      insertScore.run(jobId, 90, 80, 80, 10, 70);
+    }
+
+    insertJob.run("linkedin", "location_winner", "Location Winner", "ready");
+    const locationJobId = (db.query("SELECT id FROM jobs WHERE source_id = 'location_winner'").get() as { id: number }).id;
+    insertScore.run(locationJobId, 10, 10, 10, 100, 32.5);
+
+    const defaultPage = getJobFeed(db, { limit: 200, offset: 0 });
+    expect(defaultPage.jobs.some((job) => job.source_id === "location_winner")).toBe(false);
+
+    updateScoreWeights(db, {
+      skills: 0,
+      seniority: 0,
+      domain: 0,
+      location: 100,
+    });
+
+    const locationPage = getJobFeed(db, { limit: 200, offset: 0 });
+    expect(locationPage.jobs[0]?.source_id).toBe("location_winner");
+    expect(locationPage.jobs[0]?.weighted_composite).toBe(100);
   });
 
   test("returns correct Job shape with all fields", () => {

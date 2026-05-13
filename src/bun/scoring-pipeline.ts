@@ -3,6 +3,8 @@ import { Bunqueue } from "bunqueue/client";
 import type { FitResult, FitWeights, Job, PipelineEvent, Profile, ScoreGroup } from "../shared/types";
 import { GEMINI_FLASH, GEMINI_FLASH_LITE } from "./gemini-client";
 import { calculateComposite, scoreJob, type ScoreJobResult, type StructuredInferenceClient } from "./llm-scorer";
+import { getScoreWeights } from "./score-weight-settings";
+import { scoreGroup } from "../shared/score-weights";
 
 type ScoreJobData = { jobId: number };
 
@@ -288,21 +290,6 @@ function setJobStatus(db: Database, jobId: number, status: string): void {
   db.query("UPDATE jobs SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, jobId);
 }
 
-export function getScoreWeights(db: Database): FitWeights {
-  const rows = db.query(
-    "SELECT key, value FROM settings WHERE key IN ('weights_skills', 'weights_seniority', 'weights_domain', 'weights_location')"
-  ).all() as { key: string; value: string }[];
-  const map = new Map(rows.map((row) => [row.key, Number(row.value)]));
-  return {
-    skills: map.get("weights_skills") ?? 40,
-    seniority: map.get("weights_seniority") ?? 20,
-    domain: map.get("weights_domain") ?? 15,
-    location: map.get("weights_location") ?? 25,
-  };
-}
-
 export function getScoreGroup(composite: number): ScoreGroup {
-  if (composite >= 80) return "Top";
-  if (composite >= 65) return "Good";
-  return "Others";
+  return scoreGroup(composite);
 }
