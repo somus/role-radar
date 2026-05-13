@@ -87,7 +87,8 @@ export type AppRPCSchema = {
       setApiKey: { params: { key: string }; response: { valid: boolean } };
       getEnrichmentAnswers: { params: { profileId: number }; response: EnrichmentAnswer[] };
       getJobFeed: { params: JobFeedParams; response: JobFeedResult };
-      getJobWithScore: { params: { jobId: number }; response: JobScoreDetail | null };
+      getJobDetail: { params: { jobId: number }; response: JobDetail | null };
+      getJobReasoning: { params: { jobId: number }; response: JobReasoning | null };
       searchCities: { params: { query: string }; response: CityResult[] };
     };
     messages: {
@@ -309,10 +310,12 @@ export type JobFeedItem = Job & {
   summary: string | null;
 };
 
-export type JobScoreDetail = JobFeedItem & {
-  reasoning_prompt: string | null;
-  reasoning_response: string | null;
-  reasoning_model: string | null;
+export type JobDetail = JobFeedItem;
+
+export type JobReasoning = {
+  prompt: string;
+  response: string;
+  model: string;
 };
 
 export type JobFeedResult = {

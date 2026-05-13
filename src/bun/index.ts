@@ -8,7 +8,7 @@ import { generateQuestions, submitEnrichmentAnswers } from "./profile-enrichment
 import { generateSearchQueries, getStoredSearchQueries } from "./query-generator";
 import { getResumesDir } from "./paths";
 import { LinkedInAdapter, searchCities } from "./linkedin-adapter";
-import { storeJobs, getJobFeed, getJobWithScore, storeSearchQuery } from "./job-store";
+import { storeJobs, getJobFeed, getJobDetail, getJobReasoning, storeSearchQuery } from "./job-store";
 import { DetailFetchQueue, runHeuristicAndQueueDetails, type DetailEvent } from "./detail-fetch-queue";
 import { runScoringPipeline, resolveSelectedModel } from "./scoring-pipeline";
 import { storeSecret } from "./secret-store";
@@ -299,8 +299,11 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
       getJobFeed: (params) => {
         return getJobFeed(getDb(), params);
       },
-      getJobWithScore: ({ jobId }) => {
-        return getJobWithScore(getDb(), jobId);
+      getJobDetail: ({ jobId }) => {
+        return getJobDetail(getDb(), jobId);
+      },
+      getJobReasoning: ({ jobId }) => {
+        return getJobReasoning(getDb(), jobId);
       },
       searchCities: async ({ query }) => {
         return searchCities(query);

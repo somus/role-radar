@@ -38,9 +38,9 @@ export function Dashboard({ profile, autoStartSearch, onAutoStartConsumed, onEdi
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-3xl mx-auto py-12 px-6 space-y-8">
+      <div className="max-w-6xl mx-auto py-12 px-6 space-y-8">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">Role Radar</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Role Radar</h1>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onEditProfile}>
               Edit Profile

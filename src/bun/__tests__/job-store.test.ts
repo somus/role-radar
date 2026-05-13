@@ -5,7 +5,8 @@ import { join } from "path";
 import {
   storeJobs,
   getJobFeed,
-  getJobWithScore,
+  getJobDetail,
+  getJobReasoning,
   storeSearchQuery,
   updateHeuristicScores,
   getJobsForHeuristicScoring,
@@ -157,7 +158,7 @@ describe("getJobFeed", () => {
     expect(typeof job.resume_generated).toBe("boolean");
   });
 
-  test("getJobWithScore returns latest reasoning payload", () => {
+  test("getJobDetail returns score detail without reasoning payload", () => {
     db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
       1,
       JSON.stringify(["Backend Engineer"]),
@@ -178,11 +179,47 @@ describe("getJobFeed", () => {
       jobId, 1, "new prompt", "new response", "gemini-2.5-flash-lite",
     );
 
-    const detail = getJobWithScore(db, jobId);
+    const detail = getJobDetail(db, jobId);
     expect(detail?.summary).toBe("Strong fit");
-    expect(detail?.reasoning_prompt).toBe("new prompt");
-    expect(detail?.reasoning_response).toBe("new response");
-    expect(detail?.reasoning_model).toBe("gemini-2.5-flash-lite");
+    expect(detail?.description).toBe("desc");
+    expect(detail).not.toHaveProperty("reasoning_prompt");
+    expect(detail).not.toHaveProperty("reasoning_response");
+    expect(detail).not.toHaveProperty("reasoning_model");
+  });
+
+  test("getJobReasoning returns latest reasoning payload on demand", () => {
+    db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
+      1,
+      JSON.stringify(["Backend Engineer"]),
+      "Senior",
+      JSON.stringify({ locations: [], remote: false, min_salary: null, company_sizes: [], country: null }),
+    );
+    const jobId = (db.query("SELECT id FROM jobs WHERE source_id = 'job_0'").get() as { id: number }).id;
+    db.query(
+      "INSERT INTO llm_reasoning (job_id, profile_id, prompt, response, model) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)"
+    ).run(
+      jobId, 1, "old prompt", "old response", "gemini-2.5-flash",
+      jobId, 1, "new prompt", "new response", "gemini-2.5-flash-lite",
+    );
+
+    const reasoning = getJobReasoning(db, jobId);
+    expect(reasoning).toEqual({
+      prompt: "new prompt",
+      response: "new response",
+      model: "gemini-2.5-flash-lite",
+    });
+  });
+
+  test("getJobReasoning returns null when no reasoning has been saved", () => {
+    db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
+      1,
+      JSON.stringify(["Backend Engineer"]),
+      "Senior",
+      JSON.stringify({ locations: [], remote: false, min_salary: null, company_sizes: [], country: null }),
+    );
+    const jobId = (db.query("SELECT id FROM jobs WHERE source_id = 'job_0'").get() as { id: number }).id;
+
+    expect(getJobReasoning(db, jobId)).toBeNull();
   });
 });
 

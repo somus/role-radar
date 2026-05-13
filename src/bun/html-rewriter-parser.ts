@@ -89,26 +89,11 @@ export async function parseJobDetail(
   html: string,
   selectors: DetailSelectorConfig
 ): Promise<ParsedJobDetail> {
-  let description = "";
-  let inDescription = false;
-
   const criteria: CriterionAccum[] = [];
   let current: CriterionAccum | null = null;
   let activeField: "label" | "value" | null = null;
 
   const rewriter = new HTMLRewriter()
-    .on(selectors.description, {
-      element() {
-        inDescription = true;
-      },
-      text(chunk) {
-        if (!inDescription) return;
-        description += chunk.text;
-        if (chunk.lastInTextNode && description.length > 0) {
-          // Description spans multiple text chunks; keep accumulating.
-        }
-      },
-    })
     .on(selectors.criteriaList, {
       element() {
         if (current) criteria.push(current);
@@ -148,15 +133,87 @@ export async function parseJobDetail(
     if (key && val) map.set(key, val);
   }
 
-  const cleanedDesc = description.replace(/\s+/g, " ").trim();
+  const description = await extractDescriptionMarkdown(html, selectors.description);
 
   return {
-    description: cleanedDesc.length > 0 ? cleanedDesc : null,
+    description,
     seniority: map.get("seniority level") ?? null,
     employmentType: map.get("employment type") ?? null,
     function: map.get("job function") ?? null,
     industry: map.get("industries") ?? map.get("industry") ?? null,
   };
+}
+
+type DescriptionBlock = { kind: "paragraph" | "bullet"; text: string };
+
+async function extractDescriptionMarkdown(html: string, selector: string): Promise<string | null> {
+  const blocks: DescriptionBlock[] = [];
+  let current: DescriptionBlock | null = null;
+  let fallback = "";
+
+  function pushCurrent() {
+    if (!current) return;
+    const text = normalizeInlineText(current.text);
+    if (text.length > 0) blocks.push({ ...current, text });
+    current = null;
+  }
+
+  const rewriter = new HTMLRewriter()
+    .on(selector, {
+      text(chunk) {
+        fallback += chunk.text;
+      },
+    })
+    .on(`${selector} p`, {
+      element() {
+        pushCurrent();
+        current = { kind: "paragraph", text: "" };
+      },
+      text(chunk) {
+        if (current) current.text += chunk.text;
+      },
+    })
+    .on(`${selector} li`, {
+      element() {
+        pushCurrent();
+        current = { kind: "bullet", text: "" };
+      },
+      text(chunk) {
+        if (current) current.text += chunk.text;
+      },
+    });
+
+  await rewriter.transform(new Response(html)).text();
+  pushCurrent();
+
+  if (blocks.length > 0) {
+    const directText = removeBlockText(normalizeInlineText(fallback), blocks.map((block) => block.text));
+    const renderedBlocks = blocks
+      .map((block) => block.kind === "bullet" ? `- ${block.text}` : block.text);
+    return [
+      ...(directText ? [directText] : []),
+      ...renderedBlocks,
+    ]
+      .join("\n\n")
+      .trim();
+  }
+
+  const cleaned = normalizeInlineText(fallback);
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+function normalizeInlineText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function removeBlockText(text: string, blockTexts: string[]): string {
+  let remaining = ` ${text} `;
+  for (const blockText of blockTexts) {
+    const normalized = normalizeInlineText(blockText);
+    if (!normalized) continue;
+    remaining = remaining.replace(` ${normalized} `, " ");
+  }
+  return normalizeInlineText(remaining);
 }
 
 function finalize(partial: Partial<ParsedJob>): ParsedJob {

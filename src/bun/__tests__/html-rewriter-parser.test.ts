@@ -86,6 +86,37 @@ describe("parseJobDetail", () => {
     expect(detail.industry).toBe("Software Development");
   });
 
+  test("converts LinkedIn description paragraphs and bullets to markdown", async () => {
+    const html = readFileSync(join(fixtureDir, "job-detail.html"), "utf-8");
+    const detail = await parseJobDetail(html, detailSelectors);
+
+    expect(detail.description).toContain("We are looking for a Senior Backend Engineer");
+    expect(detail.description).toContain("\n\nYou will design distributed systems");
+    expect(detail.description).toContain("\n\n- 5+ years experience with Go or Rust");
+    expect(detail.description).toContain("\n- Strong knowledge of SQL and Postgres");
+  });
+
+  test("preserves direct description text around markdown bullets", async () => {
+    const html = `
+      <div class="show-more-less-html__markup">
+        Direct intro before any paragraph.
+        <br>
+        <strong>Responsibilities</strong>
+        <ul>
+          <li>Build APIs</li>
+          <li>Own services</li>
+        </ul>
+      </div>
+    `;
+
+    const detail = await parseJobDetail(html, detailSelectors);
+
+    expect(detail.description).toContain("Direct intro before any paragraph.");
+    expect(detail.description).toContain("Responsibilities");
+    expect(detail.description).toContain("\n\n- Build APIs");
+    expect(detail.description).toContain("\n\n- Own services");
+  });
+
   test("returns null fields when page lacks description and criteria", async () => {
     const html = readFileSync(join(fixtureDir, "job-detail-empty.html"), "utf-8");
     const detail = await parseJobDetail(html, detailSelectors);

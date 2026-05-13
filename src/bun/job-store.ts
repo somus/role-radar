@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Job, JobFeedItem, JobFeedParams, JobFeedResult, JobScoreDetail, ParsedJob, ParsedJobDetail, SearchQuery } from "../shared/types";
+import type { Job, JobDetail, JobFeedItem, JobFeedParams, JobFeedResult, JobReasoning, ParsedJob, ParsedJobDetail, SearchQuery } from "../shared/types";
 
 export function storeJobs(
   db: Database,
@@ -86,7 +86,7 @@ export function getJobFeed(
   };
 }
 
-export function getJobWithScore(db: Database, jobId: number): JobScoreDetail | null {
+export function getJobDetail(db: Database, jobId: number): JobDetail | null {
   const row = db.query(`
     SELECT
       j.*,
@@ -100,30 +100,6 @@ export function getJobWithScore(db: Database, jobId: number): JobScoreDetail | n
       s.gaps,
       s.summary,
       (
-        SELECT r.prompt
-        FROM llm_reasoning r
-        WHERE r.job_id = j.id
-          AND r.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
-        ORDER BY r.id DESC
-        LIMIT 1
-      ) AS reasoning_prompt,
-      (
-        SELECT r.response
-        FROM llm_reasoning r
-        WHERE r.job_id = j.id
-          AND r.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
-        ORDER BY r.id DESC
-        LIMIT 1
-      ) AS reasoning_response,
-      (
-        SELECT r.model
-        FROM llm_reasoning r
-        WHERE r.job_id = j.id
-          AND r.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
-        ORDER BY r.id DESC
-        LIMIT 1
-      ) AS reasoning_model,
-      (
         COALESCE(s.skills_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_skills')
         + COALESCE(s.seniority_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_seniority')
         + COALESCE(s.domain_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_domain')
@@ -136,7 +112,20 @@ export function getJobWithScore(db: Database, jobId: number): JobScoreDetail | n
     WHERE j.id = ?
   `).get(jobId) as any | null;
 
-  return row ? deserializeJobScoreDetail(row) : null;
+  return row ? deserializeJobFeedItem(row) : null;
+}
+
+export function getJobReasoning(db: Database, jobId: number): JobReasoning | null {
+  const row = db.query(`
+    SELECT prompt, response, model
+    FROM llm_reasoning
+    WHERE job_id = ?
+      AND profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
+    ORDER BY id DESC
+    LIMIT 1
+  `).get(jobId) as { prompt: string; response: string; model: string } | null;
+
+  return row;
 }
 
 export function storeSearchQuery(
@@ -261,15 +250,6 @@ function deserializeJobFeedItem(row: any): JobFeedItem {
     matches: safeParseJson(row.matches, []),
     gaps: safeParseJson(row.gaps, []),
     summary: row.summary ?? null,
-  };
-}
-
-function deserializeJobScoreDetail(row: any): JobScoreDetail {
-  return {
-    ...deserializeJobFeedItem(row),
-    reasoning_prompt: row.reasoning_prompt ?? null,
-    reasoning_response: row.reasoning_response ?? null,
-    reasoning_model: row.reasoning_model ?? null,
   };
 }
 
