@@ -34,6 +34,7 @@ function makeJob(overrides: Partial<JobFeedItem>): JobFeedItem {
     matches: [],
     gaps: [],
     summary: null,
+    dealbreaker_violations: [],
     ...overrides,
   };
 }
@@ -49,13 +50,26 @@ describe("buildJobFeedSections", () => {
     ]);
 
     expect(sections.map((section) => section.title)).toEqual([
-      "Top Matches",
-      "Good Matches",
+      "Top Matches (80+)",
+      "Good Matches (65-80)",
       "Others",
       "Still Processing",
       "Needs Attention",
     ]);
     expect(sections[3]?.jobs.map((job) => job.source_id)).toEqual(["pending"]);
     expect(sections[4]?.jobs.map((job) => job.source_id)).toEqual(["failed"]);
+  });
+
+  test("marks scored groups as sticky and exposes visible counts", () => {
+    const sections = buildJobFeedSections([
+      makeJob({ id: 1, source_id: "top-1", score_group: "Top", weighted_composite: 91 }),
+      makeJob({ id: 2, source_id: "top-2", score_group: "Top", weighted_composite: 82 }),
+      makeJob({ id: 3, source_id: "good", score_group: "Good", weighted_composite: 72 }),
+    ]);
+
+    expect(sections.map((section) => [section.title, section.count, section.sticky])).toEqual([
+      ["Top Matches (80+)", 2, true],
+      ["Good Matches (65-80)", 1, true],
+    ]);
   });
 });

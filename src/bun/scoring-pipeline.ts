@@ -255,8 +255,8 @@ function persistScore(
   db.query(
     `INSERT INTO scores (
       job_id, profile_id, skills_score, seniority_score, domain_score, location_score,
-      composite, overqualified, matches, gaps, summary
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      composite, overqualified, matches, gaps, dealbreaker_violations, summary
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(job_id, profile_id) DO UPDATE SET
       skills_score = excluded.skills_score,
       seniority_score = excluded.seniority_score,
@@ -266,6 +266,7 @@ function persistScore(
       overqualified = excluded.overqualified,
       matches = excluded.matches,
       gaps = excluded.gaps,
+      dealbreaker_violations = excluded.dealbreaker_violations,
       summary = excluded.summary`
   ).run(
     jobId,
@@ -278,6 +279,7 @@ function persistScore(
     scored.result.overqualified ? 1 : 0,
     JSON.stringify(scored.result.matches),
     JSON.stringify(scored.result.gaps),
+    JSON.stringify(scored.result.dealbreaker_violations),
     scored.result.summary,
   );
 

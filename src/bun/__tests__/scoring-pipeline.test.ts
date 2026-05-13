@@ -13,6 +13,7 @@ const migrationSql = [
   readFileSync(join(import.meta.dir, "../../../migrations/002_enrichment_questions_cache.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/003_generated_queries_cache.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/004_job_status_index.sql"), "utf-8"),
+  readFileSync(join(import.meta.dir, "../../../migrations/005_feed_filters_dealbreakers.sql"), "utf-8"),
 ].join("\n");
 
 const profile: Profile = {
@@ -46,6 +47,9 @@ const fitResult: FitResult = {
   overqualified: true,
   matches: [{ skill: "TypeScript", type: "exact", context: "Strong TypeScript background." }],
   gaps: [{ skill: "Kubernetes", type: "partial", context: "Adjacent infrastructure experience only." }],
+  dealbreaker_violations: [
+    { dealbreaker: "No onsite-only", reason: "Job requires office attendance." },
+  ],
   summary: "Good match with a modest platform gap.",
 };
 
@@ -144,7 +148,7 @@ describe("runScoringPipeline", () => {
     expect(statusRow.status).toBe("ready");
 
     const scoreRow = db.query(
-      "SELECT skills_score, seniority_score, domain_score, location_score, composite, overqualified FROM scores WHERE job_id = ?"
+      "SELECT skills_score, seniority_score, domain_score, location_score, composite, overqualified, dealbreaker_violations FROM scores WHERE job_id = ?"
     ).get(jobId) as any;
     expect(scoreRow.skills_score).toBe(80);
     expect(scoreRow.seniority_score).toBe(60);
@@ -152,6 +156,9 @@ describe("runScoringPipeline", () => {
     expect(scoreRow.location_score).toBe(90);
     expect(scoreRow.composite).toBe(77);
     expect(scoreRow.overqualified).toBe(1);
+    expect(JSON.parse(scoreRow.dealbreaker_violations)).toEqual([
+      { dealbreaker: "No onsite-only", reason: "Job requires office attendance." },
+    ]);
 
     const reasoningRow = db.query(
       "SELECT prompt, response, model FROM llm_reasoning WHERE job_id = ?"
@@ -169,5 +176,8 @@ describe("runScoringPipeline", () => {
     expect(feed.jobs[0]?.weighted_composite).toBe(77);
     expect(feed.jobs[0]?.score_group).toBe("Good");
     expect(feed.jobs[0]?.overqualified).toBe(true);
+    expect(feed.jobs[0]?.dealbreaker_violations).toEqual([
+      { dealbreaker: "No onsite-only", reason: "Job requires office attendance." },
+    ]);
   });
 });

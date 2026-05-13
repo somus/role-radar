@@ -59,6 +59,9 @@ const fitResult: FitResult = {
   gaps: [
     { skill: "Kubernetes", type: "partial", context: "Relevant platform background but Kubernetes is not explicit." },
   ],
+  dealbreaker_violations: [
+    { dealbreaker: "No onsite-only", reason: "The role is hybrid in San Francisco." },
+  ],
   summary: "Strong backend fit with one infrastructure gap.",
 };
 
@@ -104,6 +107,28 @@ describe("scoreJob", () => {
     expect(prompt).toContain("50-69 = possible with growth");
     expect(prompt).toContain("<50 = poor fit");
     expect(prompt).toContain("Set overqualified=true if the candidate's seniority clearly exceeds the role");
+  });
+
+  test("prompt asks for dealbreaker violations in the same scoring response", async () => {
+    let prompt = "";
+    const client: StructuredInferenceClient = {
+      inferStructured: async <T>(incomingPrompt: string) => {
+        prompt = incomingPrompt;
+        return {
+          data: fitResult as T,
+          rawText: JSON.stringify(fitResult),
+          model: "gemini-2.5-flash",
+        };
+      },
+    };
+
+    const scored = await scoreJob(baseJob, baseProfile, "resume text here", client);
+
+    expect(prompt).toContain("Dealbreaker violations must be returned as objects with dealbreaker and reason");
+    expect(prompt).toContain("Do not run a separate dealbreaker check");
+    expect(scored.result.dealbreaker_violations).toEqual([
+      { dealbreaker: "No onsite-only", reason: "The role is hybrid in San Francisco." },
+    ]);
   });
 });
 

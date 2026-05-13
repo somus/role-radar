@@ -6,17 +6,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { FitWeights, Gap, JobDetail, JobFeedItem, JobFeedResult, JobReasoning, Match, ScoreGroup } from "../shared/types";
+import { Switch } from "@/components/ui/switch";
+import { DEFAULT_JOB_FEED_FILTERS, type FitWeights, type Gap, type JobDetail, type JobFeedFilters, type JobFeedItem, type JobFeedResult, type JobReasoning, type Match, type ScoreGroup } from "../shared/types";
 import { DEFAULT_FIT_WEIGHTS, adjustWeights, type FitWeightKey } from "../shared/score-weights";
 import { buildDimensionRows, isSelectedDetailCurrent, type DimensionRow, type ScoreTone } from "./job-detail-view-model";
 import { applyWeightsToJob, applyWeightsToJobFeed } from "./job-feed-rerank";
+import { reconcileSelectedJobId } from "./job-feed-filters";
 import { buildJobFeedSections, isFailedStatus, isPendingStatus } from "./job-feed-sections";
 import { cn } from "@/lib/utils";
 
 const JOB_LIST_PAGE_SIZE = 200;
 const WEIGHT_SAVE_DEBOUNCE_MS = 350;
+const FILTER_SAVE_DEBOUNCE_MS = 250;
 
-type WeightSaveStatus = "saving" | "saved" | null;
+type SaveStatus = "saving" | "saved" | null;
 
 type Props = {
   profileId: number;
@@ -30,6 +33,13 @@ const WEIGHT_ROWS: Array<{ key: FitWeightKey; label: string }> = [
   { key: "domain", label: "Domain" },
   { key: "location", label: "Location" },
 ];
+
+function hasActiveFeedFilters(filters: JobFeedFilters): boolean {
+  return (
+    filters.minScore !== DEFAULT_JOB_FEED_FILTERS.minScore
+    || filters.hideDealbreakers !== DEFAULT_JOB_FEED_FILTERS.hideDealbreakers
+  );
+}
 
 export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
   const [jobs, setJobs] = useState<JobFeedItem[]>([]);
@@ -51,11 +61,17 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
   const [reasoning, setReasoning] = useState<JobReasoning | null>(null);
   const [weights, setWeights] = useState<FitWeights>(DEFAULT_FIT_WEIGHTS);
   const [weightsError, setWeightsError] = useState<string | null>(null);
-  const [weightSaveStatus, setWeightSaveStatus] = useState<WeightSaveStatus>(null);
+  const [weightSaveStatus, setWeightSaveStatus] = useState<SaveStatus>(null);
+  const [filters, setFilters] = useState<JobFeedFilters>(DEFAULT_JOB_FEED_FILTERS);
+  const [filtersError, setFiltersError] = useState<string | null>(null);
+  const [filterSaveStatus, setFilterSaveStatus] = useState<SaveStatus>(null);
   const reasoningLoadedFor = useRef<number | null>(null);
   const weightsRef = useRef<FitWeights>(DEFAULT_FIT_WEIGHTS);
+  const filtersRef = useRef<JobFeedFilters>(DEFAULT_JOB_FEED_FILTERS);
   const weightsSaveDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const filtersSaveDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
   const weightsSaveVersion = useRef(0);
+  const filtersSaveVersion = useRef(0);
 
   const loadJobs = useCallback(async (pageOffset = 0, append = false) => {
     setLoading(true);
@@ -63,6 +79,7 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
       const result: JobFeedResult = await electrobun.rpc.request.getJobFeed({
         limit: JOB_LIST_PAGE_SIZE,
         offset: pageOffset,
+        filters: filtersRef.current,
       });
       setTotal(result.total);
       setHasMore(result.hasMore);
@@ -73,11 +90,7 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
           append ? [...currentJobs, ...result.jobs] : result.jobs,
           weightsRef.current,
         );
-        setSelectedJobId((current) => {
-          if (nextJobs.length === 0) return null;
-          if (current && nextJobs.some((job) => job.id === current)) return current;
-          return nextJobs[0]!.id;
-        });
+        setSelectedJobId((current) => reconcileSelectedJobId(current, nextJobs));
         return nextJobs;
       });
     } finally {
@@ -87,26 +100,35 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    void electrobun.rpc.request.getWeights()
-      .then((nextWeights) => {
+    void Promise.all([
+      electrobun.rpc.request.getWeights(),
+      electrobun.rpc.request.getJobFeedFilters(),
+    ])
+      .then(([nextWeights, nextFilters]) => {
         if (cancelled) return;
         weightsRef.current = nextWeights;
+        filtersRef.current = nextFilters;
         setWeights(nextWeights);
+        setFilters(nextFilters);
         setWeightsError(null);
+        setFiltersError(null);
         setWeightSaveStatus("saved");
+        setFilterSaveStatus("saved");
         setJobs((currentJobs) => applyWeightsToJobFeed(currentJobs, nextWeights));
         setSelectedJob((currentJob) => currentJob ? applyWeightsToJob(currentJob, nextWeights) : currentJob);
+        void loadJobs(0, false);
       })
       .catch((e: any) => {
-        if (!cancelled) setWeightsError(e.message ?? "Failed to load scoring weights.");
+        if (!cancelled) {
+          const message = e.message ?? "Failed to load feed controls.";
+          setWeightsError(message);
+          setFiltersError(message);
+          void loadJobs(0, false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
-
-  useEffect(() => {
-    void loadJobs(0, false);
   }, [refreshKey, loadJobs]);
 
   const reloadDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -115,6 +137,7 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
     return () => {
       clearTimeout(reloadDebounce.current);
       clearTimeout(weightsSaveDebounce.current);
+      clearTimeout(filtersSaveDebounce.current);
     };
   }, []);
 
@@ -160,6 +183,70 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
     setSelectedJob((currentJob) => currentJob ? applyWeightsToJob(currentJob, DEFAULT_FIT_WEIGHTS) : currentJob);
     persistWeights(DEFAULT_FIT_WEIGHTS);
   }, [persistWeights]);
+
+  const scheduleFeedReload = useCallback(() => {
+    clearTimeout(reloadDebounce.current);
+    reloadDebounce.current = setTimeout(() => void loadJobs(0, false), 150);
+  }, [loadJobs]);
+
+  const persistFilters = useCallback((nextFilters: JobFeedFilters) => {
+    const saveVersion = ++filtersSaveVersion.current;
+    clearTimeout(filtersSaveDebounce.current);
+    setFilterSaveStatus("saving");
+    filtersSaveDebounce.current = setTimeout(() => {
+      void electrobun.rpc.request.updateJobFeedFilters(nextFilters)
+        .then((savedFilters) => {
+          if (saveVersion !== filtersSaveVersion.current) return;
+          filtersRef.current = savedFilters;
+          setFilters(savedFilters);
+          setFiltersError(null);
+          setFilterSaveStatus("saved");
+          scheduleFeedReload();
+        })
+        .catch((e: any) => {
+          if (saveVersion !== filtersSaveVersion.current) return;
+          setFiltersError(e.message ?? "Failed to save feed filters.");
+          setFilterSaveStatus(null);
+        });
+    }, FILTER_SAVE_DEBOUNCE_MS);
+  }, [scheduleFeedReload]);
+
+  const applyMinScoreChange = useCallback((minScore: number) => {
+    const nextFilters = {
+      ...filtersRef.current,
+      minScore,
+    };
+    filtersRef.current = nextFilters;
+    setFilters(nextFilters);
+    setFiltersError(null);
+    persistFilters(nextFilters);
+    scheduleFeedReload();
+  }, [persistFilters, scheduleFeedReload]);
+
+  const applyHideDealbreakersChange = useCallback((hideDealbreakers: boolean) => {
+    const nextFilters = {
+      ...filtersRef.current,
+      hideDealbreakers,
+    };
+    filtersRef.current = nextFilters;
+    setFilters(nextFilters);
+    setFiltersError(null);
+    persistFilters(nextFilters);
+    scheduleFeedReload();
+  }, [persistFilters, scheduleFeedReload]);
+
+  const resetFilters = useCallback(() => {
+    filtersRef.current = DEFAULT_JOB_FEED_FILTERS;
+    setFilters(DEFAULT_JOB_FEED_FILTERS);
+    setFiltersError(null);
+    persistFilters(DEFAULT_JOB_FEED_FILTERS);
+    scheduleFeedReload();
+  }, [persistFilters, scheduleFeedReload]);
+
+  const resetFeedControls = useCallback(() => {
+    resetWeights();
+    resetFilters();
+  }, [resetFilters, resetWeights]);
 
   useEffect(() => {
     function handlePipeline(e: Event) {
@@ -262,21 +349,37 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
     setSelectedJob((current) => current?.id === jobId ? current : null);
   }, []);
 
+  const filtersActive = hasActiveFeedFilters(filters);
+
   if (!loading && jobs.length === 0) {
     return (
       <div className="space-y-3">
-        <ScoringWeightsPanel
+        <FeedControlsPanel
           weights={weights}
-          error={weightsError}
-          saveStatus={weightSaveStatus}
+          weightsError={weightsError}
+          weightSaveStatus={weightSaveStatus}
+          filters={filters}
+          filtersError={filtersError}
+          filterSaveStatus={filterSaveStatus}
           onWeightChange={applyWeightChange}
-          onReset={resetWeights}
+          onMinScoreChange={applyMinScoreChange}
+          onHideDealbreakersChange={applyHideDealbreakersChange}
+          onReset={resetFeedControls}
         />
-        <p className="py-4 text-center text-xs text-muted-foreground">
-          {hasSearched
-            ? "No jobs found. Try different keywords or broaden your filters."
-            : "No jobs yet. Run a search to discover jobs."}
-        </p>
+        <div className="space-y-2 py-4 text-center">
+          <p className="text-xs text-muted-foreground">
+            {filtersActive
+              ? "No jobs match the current feed filters."
+              : hasSearched
+                ? "No jobs found. Try different keywords or broaden your filters."
+                : "No jobs yet. Run a search to discover jobs."}
+          </p>
+          {filtersActive && (
+            <Button variant="outline" size="sm" onClick={resetFilters}>
+              Clear filters
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
@@ -324,19 +427,30 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
       <div className="grid min-h-[680px] overflow-hidden border border-border bg-background md:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)]">
         <aside className="min-h-0 border-b border-border md:border-b-0 md:border-r">
           <div className="max-h-[680px] space-y-4 overflow-y-auto p-3" role="listbox" aria-label="Jobs">
-            <ScoringWeightsPanel
+            <FeedControlsPanel
               weights={weights}
-              error={weightsError}
-              saveStatus={weightSaveStatus}
+              weightsError={weightsError}
+              weightSaveStatus={weightSaveStatus}
+              filters={filters}
+              filtersError={filtersError}
+              filterSaveStatus={filterSaveStatus}
               onWeightChange={applyWeightChange}
-              onReset={resetWeights}
+              onMinScoreChange={applyMinScoreChange}
+              onHideDealbreakersChange={applyHideDealbreakersChange}
+              onReset={resetFeedControls}
             />
             {loading && jobs.length === 0 && (
               <p className="py-4 text-center text-xs text-muted-foreground">Loading jobs…</p>
             )}
             {sections.map((section) => (
               <div key={section.title} className="space-y-2">
-                <p className="px-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{section.title}</p>
+                <div className={cn(
+                  "flex items-center justify-between gap-2 bg-background px-1 py-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground",
+                  section.sticky && "sticky top-0 z-10 border-b border-border",
+                )}>
+                  <p>{section.title}</p>
+                  <Badge variant="outline" className="px-1.5 py-0 text-[10px] tracking-normal">{section.count}</Badge>
+                </div>
                 {section.jobs.map((job) => (
                   <JobListItem
                     key={job.id}
@@ -377,6 +491,11 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
               Loading job details…
             </div>
           )}
+          {!detailLoading && !detailError && !selectedJobId && (
+            <div className="flex h-full min-h-[360px] items-center justify-center px-6 text-sm text-muted-foreground">
+              No job selected.
+            </div>
+          )}
           {!detailLoading && !detailError && selectedDetailCurrent && selectedJob && (
             <JobDetailPanel
               job={selectedJob}
@@ -393,17 +512,27 @@ export function JobFeed({ profileId, refreshKey, hasSearched }: Props) {
   );
 }
 
-function ScoringWeightsPanel({
+function FeedControlsPanel({
   weights,
-  error,
-  saveStatus,
+  weightsError,
+  weightSaveStatus,
+  filters,
+  filtersError,
+  filterSaveStatus,
   onWeightChange,
+  onMinScoreChange,
+  onHideDealbreakersChange,
   onReset,
 }: {
   weights: FitWeights;
-  error: string | null;
-  saveStatus: WeightSaveStatus;
+  weightsError: string | null;
+  weightSaveStatus: SaveStatus;
+  filters: JobFeedFilters;
+  filtersError: string | null;
+  filterSaveStatus: SaveStatus;
   onWeightChange: (key: FitWeightKey, value: number) => void;
+  onMinScoreChange: (value: number) => void;
+  onHideDealbreakersChange: (checked: boolean) => void;
   onReset: () => void;
 }) {
   return (
@@ -412,7 +541,7 @@ function ScoringWeightsPanel({
         <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
           <CollapsibleTrigger asChild>
             <Button variant="ghost" className="group h-7 flex-1 justify-between rounded-none px-0 text-left text-xs font-medium">
-              <span>Scoring weights</span>
+              <span>Feed controls</span>
               <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
             </Button>
           </CollapsibleTrigger>
@@ -422,13 +551,39 @@ function ScoringWeightsPanel({
             className="h-7 rounded-none px-2"
             onClick={onReset}
             title="Reset to defaults"
-            aria-label="Reset scoring weights to defaults"
+            aria-label="Reset feed controls to defaults"
           >
             <RotateCcw className="size-3.5" />
           </Button>
         </div>
         <CollapsibleContent>
-          <div className="space-y-3 p-3">
+          <div className="space-y-4 p-3">
+            <div className="space-y-3">
+              <label className="grid grid-cols-[70px_minmax(0,1fr)_34px] items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Min score</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={filters.minScore}
+                  onChange={(event) => onMinScoreChange(Number(event.currentTarget.value))}
+                  className="h-2 w-full cursor-pointer accent-primary"
+                />
+                <span className="text-right tabular-nums">{filters.minScore}</span>
+              </label>
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-muted-foreground">Hide dealbreakers</span>
+                <Switch
+                  size="sm"
+                  checked={filters.hideDealbreakers}
+                  onCheckedChange={onHideDealbreakersChange}
+                  aria-label="Hide dealbreaker violations"
+                />
+              </div>
+            </div>
+            <div className="h-px bg-border" />
+            <div className="space-y-3">
             {WEIGHT_ROWS.map((row) => (
               <label key={row.key} className="grid grid-cols-[70px_minmax(0,1fr)_34px] items-center gap-2 text-xs">
                 <span className="text-muted-foreground">{row.label}</span>
@@ -444,10 +599,13 @@ function ScoringWeightsPanel({
                 <span className="text-right tabular-nums">{weights[row.key]}%</span>
               </label>
             ))}
-            {error ? (
-              <p className="text-xs text-destructive">{error}</p>
-            ) : saveStatus ? (
-              <p className="text-xs text-muted-foreground">{saveStatus === "saving" ? "Saving..." : "Saved"}</p>
+            </div>
+            {weightsError || filtersError ? (
+              <p className="text-xs text-destructive">{weightsError ?? filtersError}</p>
+            ) : weightSaveStatus === "saving" || filterSaveStatus === "saving" ? (
+              <p className="text-xs text-muted-foreground">Saving...</p>
+            ) : weightSaveStatus === "saved" || filterSaveStatus === "saved" ? (
+              <p className="text-xs text-muted-foreground">Saved</p>
             ) : null}
           </div>
         </CollapsibleContent>
@@ -485,6 +643,11 @@ function JobListItem({ job, selected, onSelect }: { job: JobFeedItem; selected: 
               {job.location && <> · {job.location}</>}
             </p>
             <div className="flex flex-wrap gap-1">
+              {job.dealbreaker_violations.length > 0 && (
+                <Badge variant="outline" className="border-red-300 bg-red-50 px-1.5 py-0 text-[10px] text-red-700">
+                  Dealbreaker
+                </Badge>
+              )}
               {job.overqualified && <Badge variant="outline" className="px-1.5 py-0 text-[10px]">Overqualified</Badge>}
               {job.weighted_composite === null && isPendingStatus(job.status) && (
                 <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Scoring</Badge>
@@ -567,6 +730,22 @@ function JobDetailPanel({
           {job.overqualified && (
             <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
               This role appears below your current seniority. Treat the score as a fit signal, not a level match.
+            </div>
+          )}
+
+          {job.dealbreaker_violations.length > 0 && (
+            <div className="space-y-2 border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="border-red-300 bg-background/70 text-red-700">Dealbreaker</Badge>
+                <p className="font-medium">Profile dealbreaker violated</p>
+              </div>
+              <ul className="space-y-1">
+                {job.dealbreaker_violations.map((violation) => (
+                  <li key={`${violation.dealbreaker}-${violation.reason}`} className="text-xs leading-5">
+                    <span className="font-medium">{violation.dealbreaker}:</span> {violation.reason}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

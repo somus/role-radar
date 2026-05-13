@@ -24,6 +24,12 @@ export const FitResultSchema = z.object({
       context: z.string().min(1),
     }),
   ),
+  dealbreaker_violations: z.array(
+    z.object({
+      dealbreaker: z.string().min(1),
+      reason: z.string().min(1),
+    }),
+  ),
   summary: z.string().min(1),
 });
 
@@ -81,6 +87,9 @@ function buildScoringPrompt(job: Job, profile: Profile, resumeText: string): str
     "- Score skills, seniority, domain, and location independently on a 0-100 scale.",
     "- Set overqualified=true if the candidate's seniority clearly exceeds the role.",
     "- Matches and gaps must be structured objects with skill, type, and short context.",
+    "- Dealbreaker violations must be returned as objects with dealbreaker and reason.",
+    "- Do not run a separate dealbreaker check; evaluate dealbreakers during this same scoring pass.",
+    "- Return an empty dealbreaker_violations array when no profile dealbreaker is violated.",
     "- Summary should be 1-2 sentences and explain the overall fit.",
     "",
     `Job title: ${job.title}`,

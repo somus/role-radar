@@ -34,6 +34,7 @@ function makeJob(overrides: Partial<JobFeedItem>): JobFeedItem {
     matches: [],
     gaps: [],
     summary: null,
+    dealbreaker_violations: [],
     ...overrides,
   };
 }

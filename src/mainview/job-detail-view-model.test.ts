@@ -34,6 +34,7 @@ function makeDetail(overrides: Partial<JobDetail> = {}): JobDetail {
     matches: [],
     gaps: [],
     summary: null,
+    dealbreaker_violations: [],
     ...overrides,
   };
 }

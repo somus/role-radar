@@ -18,12 +18,14 @@ import {
 import { updateScoreWeights } from "../score-weight-settings";
 import type { ParsedJob, ParsedJobDetail } from "../../shared/types";
 
-const migrationSql = [
+const migrationSqlThrough004 = [
   readFileSync(join(import.meta.dir, "../../../migrations/001_init.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/002_enrichment_questions_cache.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/003_generated_queries_cache.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/004_job_status_index.sql"), "utf-8"),
 ].join("\n");
+const migration005Sql = readFileSync(join(import.meta.dir, "../../../migrations/005_feed_filters_dealbreakers.sql"), "utf-8");
+const migrationSql = [migrationSqlThrough004, migration005Sql].join("\n");
 
 function makeJob(overrides: Partial<ParsedJob> = {}): ParsedJob {
   return {
@@ -188,6 +190,79 @@ describe("getJobFeed", () => {
     expect(locationPage.jobs[0]?.weighted_composite).toBe(100);
   });
 
+  test("applies min score filter before pagination and totals", () => {
+    db.query("DELETE FROM jobs").run();
+    db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
+      1,
+      JSON.stringify(["Backend Engineer"]),
+      "Senior",
+      JSON.stringify({ locations: [], remote: false, min_salary: null, company_sizes: [], country: null }),
+    );
+
+    const insertJob = db.query(
+      "INSERT INTO jobs (source, source_id, title, status, is_new) VALUES (?, ?, ?, ?, 0)"
+    );
+    const insertScore = db.query(
+      `INSERT INTO scores (
+        job_id, profile_id, skills_score, seniority_score, domain_score, location_score,
+        composite, overqualified, matches, gaps, dealbreaker_violations
+      ) VALUES (?, 1, ?, ?, ?, ?, ?, 0, '[]', '[]', '[]')`
+    );
+
+    insertJob.run("linkedin", "top", "Top Job", "ready");
+    insertScore.run((db.query("SELECT id FROM jobs WHERE source_id = 'top'").get() as { id: number }).id, 90, 90, 90, 90, 90);
+    insertJob.run("linkedin", "low", "Low Job", "ready");
+    insertScore.run((db.query("SELECT id FROM jobs WHERE source_id = 'low'").get() as { id: number }).id, 50, 50, 50, 50, 50);
+    insertJob.run("linkedin", "pending", "Pending Job", "scoring");
+
+    const result = getJobFeed(db, {
+      limit: 10,
+      offset: 0,
+      filters: { minScore: 65, hideDealbreakers: false },
+    });
+
+    expect(result.total).toBe(2);
+    expect(result.hasMore).toBe(false);
+    expect(result.jobs.map((job) => job.source_id)).toEqual(["top", "pending"]);
+  });
+
+  test("applies dealbreaker filter before pagination and totals", () => {
+    db.query("DELETE FROM jobs").run();
+    db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
+      1,
+      JSON.stringify(["Backend Engineer"]),
+      "Senior",
+      JSON.stringify({ locations: [], remote: false, min_salary: null, company_sizes: [], country: null }),
+    );
+
+    const insertJob = db.query(
+      "INSERT INTO jobs (source, source_id, title, status, is_new) VALUES (?, ?, ?, ?, 0)"
+    );
+    const insertScore = db.query(
+      `INSERT INTO scores (
+        job_id, profile_id, skills_score, seniority_score, domain_score, location_score,
+        composite, overqualified, matches, gaps, dealbreaker_violations
+      ) VALUES (?, 1, 90, 90, 90, 90, 90, 0, '[]', '[]', ?)`
+    );
+
+    insertJob.run("linkedin", "violating", "Violating Job", "ready");
+    insertScore.run(
+      (db.query("SELECT id FROM jobs WHERE source_id = 'violating'").get() as { id: number }).id,
+      JSON.stringify([{ dealbreaker: "no onsite", reason: "Requires office attendance." }]),
+    );
+    insertJob.run("linkedin", "clean", "Clean Job", "ready");
+    insertScore.run((db.query("SELECT id FROM jobs WHERE source_id = 'clean'").get() as { id: number }).id, "[]");
+
+    const result = getJobFeed(db, {
+      limit: 10,
+      offset: 0,
+      filters: { minScore: 0, hideDealbreakers: true },
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.jobs.map((job) => job.source_id)).toEqual(["clean"]);
+  });
+
   test("returns correct Job shape with all fields", () => {
     const result = getJobFeed(db, { limit: 1, offset: 0 });
     const job = result.jobs[0]!;
@@ -231,6 +306,33 @@ describe("getJobFeed", () => {
     expect(detail).not.toHaveProperty("reasoning_model");
   });
 
+  test("getJobFeed and getJobDetail deserialize dealbreaker violations from scores", () => {
+    db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
+      1,
+      JSON.stringify(["Backend Engineer"]),
+      "Senior",
+      JSON.stringify({ locations: [], remote: false, min_salary: null, company_sizes: [], country: null }),
+    );
+    db.query("UPDATE jobs SET status = 'ready', description = 'desc' WHERE source_id = 'job_0'").run();
+    const jobId = (db.query("SELECT id FROM jobs WHERE source_id = 'job_0'").get() as { id: number }).id;
+    const violations = [
+      { dealbreaker: "no onsite", reason: "Job requires three days in office." },
+    ];
+
+    db.query(
+      `INSERT INTO scores (
+        job_id, profile_id, skills_score, seniority_score, domain_score, location_score,
+        composite, overqualified, matches, gaps, dealbreaker_violations, summary
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(jobId, 1, 80, 70, 60, 90, 77, 0, "[]", "[]", JSON.stringify(violations), "Strong fit");
+
+    const feedJob = getJobFeed(db, { limit: 10, offset: 0 }).jobs.find((job) => job.id === jobId);
+    const detail = getJobDetail(db, jobId);
+
+    expect(feedJob?.dealbreaker_violations).toEqual(violations);
+    expect(detail?.dealbreaker_violations).toEqual(violations);
+  });
+
   test("getJobReasoning returns latest reasoning payload on demand", () => {
     db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
       1,
@@ -264,6 +366,47 @@ describe("getJobFeed", () => {
     const jobId = (db.query("SELECT id FROM jobs WHERE source_id = 'job_0'").get() as { id: number }).id;
 
     expect(getJobReasoning(db, jobId)).toBeNull();
+  });
+});
+
+describe("migration 005", () => {
+  test("requeues existing scored jobs for dealbreaker-aware rescoring", () => {
+    const db = new Database(":memory:");
+    db.exec("PRAGMA foreign_keys=ON");
+    db.exec(migrationSqlThrough004);
+    db.query("INSERT INTO profiles (id, roles, seniority, preferences) VALUES (?, ?, ?, ?)").run(
+      1,
+      JSON.stringify(["Backend Engineer"]),
+      "Senior",
+      JSON.stringify({ locations: [], remote: false, min_salary: null, company_sizes: [], country: null }),
+    );
+    db.query("INSERT INTO jobs (id, source, source_id, title, status, description) VALUES (?, ?, ?, ?, ?, ?)").run(
+      1,
+      "linkedin",
+      "old-score",
+      "Old Score",
+      "ready",
+      "desc",
+    );
+    db.query(
+      `INSERT INTO scores (
+        job_id, profile_id, skills_score, seniority_score, domain_score, location_score,
+        composite, overqualified, matches, gaps
+      ) VALUES (1, 1, 80, 80, 80, 80, 80, 0, '[]', '[]')`
+    ).run();
+    db.query(
+      "INSERT INTO llm_reasoning (job_id, profile_id, prompt, response, model) VALUES (1, 1, 'prompt', 'response', 'model')"
+    ).run();
+
+    db.exec(migration005Sql);
+
+    const job = db.query("SELECT status FROM jobs WHERE id = 1").get() as { status: string };
+    const scoreCount = (db.query("SELECT COUNT(*) as c FROM scores").get() as { c: number }).c;
+    const reasoningCount = (db.query("SELECT COUNT(*) as c FROM llm_reasoning").get() as { c: number }).c;
+
+    expect(job.status).toBe("ready_for_scoring");
+    expect(scoreCount).toBe(0);
+    expect(reasoningCount).toBe(0);
   });
 });
 

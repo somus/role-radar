@@ -137,9 +137,14 @@ Explicit rubric in LLM scoring prompt:
   "gaps": [
     { "skill": "Kubernetes", "type": "exact", "context": "Job requires 3+ years, not on resume" }
   ],
+  "dealbreaker_violations": [
+    { "dealbreaker": "no onsite", "reason": "Job requires three days in office" }
+  ],
   "summary": "Strong backend match. Skill alignment high, domain shift from Fintech to Healthcare is the main gap."
 }
 ```
+
+Scoring schema changes that add new fit semantics, such as dealbreaker evaluation, require existing score rows to be regenerated before the feed treats them as current.
 
 ### Job Lifecycle
 

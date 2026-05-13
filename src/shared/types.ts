@@ -91,6 +91,8 @@ export type AppRPCSchema = {
       getJobReasoning: { params: { jobId: number }; response: JobReasoning | null };
       getWeights: { params: undefined; response: FitWeights };
       updateWeights: { params: FitWeights; response: FitWeights };
+      getJobFeedFilters: { params: undefined; response: JobFeedFilters };
+      updateJobFeedFilters: { params: JobFeedFilters; response: JobFeedFilters };
       searchCities: { params: { query: string }; response: CityResult[] };
     };
     messages: {
@@ -228,6 +230,11 @@ export type Gap = {
   context: string;
 };
 
+export type DealbreakerViolation = {
+  dealbreaker: string;
+  reason: string;
+};
+
 export type FitResult = {
   skills_score: number;
   seniority_score: number;
@@ -236,6 +243,7 @@ export type FitResult = {
   overqualified: boolean;
   matches: Match[];
   gaps: Gap[];
+  dealbreaker_violations: DealbreakerViolation[];
   summary: string;
 };
 
@@ -244,6 +252,16 @@ export type FitWeights = {
   seniority: number;
   domain: number;
   location: number;
+};
+
+export type JobFeedFilters = {
+  minScore: number;
+  hideDealbreakers: boolean;
+};
+
+export const DEFAULT_JOB_FEED_FILTERS: JobFeedFilters = {
+  minScore: 0,
+  hideDealbreakers: false,
 };
 
 export type ScoreGroup = "Top" | "Good" | "Others";
@@ -296,6 +314,7 @@ export type CityResult = {
 export type JobFeedParams = {
   limit: number;
   offset: number;
+  filters?: JobFeedFilters;
 };
 
 export type JobFeedItem = Job & {
@@ -310,6 +329,7 @@ export type JobFeedItem = Job & {
   matches: Match[];
   gaps: Gap[];
   summary: string | null;
+  dealbreaker_violations: DealbreakerViolation[];
 };
 
 export type JobDetail = JobFeedItem;

@@ -2,6 +2,8 @@ import type { JobFeedItem, ScoreGroup } from "../shared/types";
 
 export type JobFeedSection = {
   title: string;
+  count: number;
+  sticky: boolean;
   jobs: JobFeedItem[];
 };
 
@@ -14,7 +16,9 @@ export function buildJobFeedSections(jobs: JobFeedItem[]): JobFeedSection[] {
     const groupJobs = jobs.filter((job) => job.score_group === group);
     if (groupJobs.length > 0) {
       sections.push({
-        title: group === "Top" ? "Top Matches" : group === "Good" ? "Good Matches" : "Others",
+        title: group === "Top" ? "Top Matches (80+)" : group === "Good" ? "Good Matches (65-80)" : "Others",
+        count: groupJobs.length,
+        sticky: true,
         jobs: groupJobs,
       });
     }
@@ -22,12 +26,12 @@ export function buildJobFeedSections(jobs: JobFeedItem[]): JobFeedSection[] {
 
   const pending = jobs.filter((job) => isPendingStatus(job.status) && job.score_group === null);
   if (pending.length > 0) {
-    sections.push({ title: "Still Processing", jobs: pending });
+    sections.push({ title: "Still Processing", count: pending.length, sticky: false, jobs: pending });
   }
 
   const failed = jobs.filter((job) => isFailedStatus(job.status));
   if (failed.length > 0) {
-    sections.push({ title: "Needs Attention", jobs: failed });
+    sections.push({ title: "Needs Attention", count: failed.length, sticky: false, jobs: failed });
   }
 
   return sections;

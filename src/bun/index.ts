@@ -12,6 +12,7 @@ import { storeJobs, getJobFeed, getJobDetail, getJobReasoning, storeSearchQuery 
 import { DetailFetchQueue, runHeuristicAndQueueDetails, type DetailEvent } from "./detail-fetch-queue";
 import { runScoringPipeline, resolveSelectedModel } from "./scoring-pipeline";
 import { getScoreWeights, updateScoreWeights } from "./score-weight-settings";
+import { getJobFeedFilters, updateJobFeedFilters } from "./feed-filter-settings";
 import { storeSecret } from "./secret-store";
 import { API_KEY_NAME, getConfiguredGeminiKey, hasConfiguredGeminiKey } from "./gemini-config";
 import { invalidateScoresAndRequeueJobs } from "./scoring-state";
@@ -311,6 +312,12 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
       },
       updateWeights: (weights) => {
         return updateScoreWeights(getDb(), weights);
+      },
+      getJobFeedFilters: () => {
+        return getJobFeedFilters(getDb());
+      },
+      updateJobFeedFilters: (filters) => {
+        return updateJobFeedFilters(getDb(), filters);
       },
       searchCities: async ({ query }) => {
         return searchCities(query);

@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Job, JobDetail, JobFeedItem, JobFeedParams, JobFeedResult, JobReasoning, ParsedJob, ParsedJobDetail, SearchQuery } from "../shared/types";
+import { DEFAULT_JOB_FEED_FILTERS, type Job, type JobDetail, type JobFeedFilters, type JobFeedItem, type JobFeedParams, type JobFeedResult, type JobReasoning, type ParsedJob, type ParsedJobDetail, type SearchQuery } from "../shared/types";
 import { scoreGroup } from "../shared/score-weights";
 
 export function storeJobs(
@@ -39,51 +39,84 @@ export function getJobFeed(
   params: JobFeedParams
 ): JobFeedResult {
   const { limit, offset } = params;
+  const filters = normalizeFeedFilters(params.filters);
+  const hideDealbreakers = filters.hideDealbreakers ? 1 : 0;
 
-  const total = (db.query(
-    "SELECT COUNT(*) as c FROM jobs WHERE status != 'parse_failed'"
-  ).get() as { c: number }).c;
+  const filteredFeedCte = `
+    WITH feed AS (
+      SELECT
+        j.*,
+        s.skills_score,
+        s.seniority_score,
+        s.domain_score,
+        s.location_score,
+        s.composite,
+        s.overqualified,
+        s.matches,
+        s.gaps,
+        s.dealbreaker_violations,
+        s.summary,
+        CASE
+          WHEN s.job_id IS NULL THEN NULL
+          ELSE (
+            s.skills_score * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_skills')
+            + s.seniority_score * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_seniority')
+            + s.domain_score * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_domain')
+            + s.location_score * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_location')
+          )
+        END AS weighted_composite
+      FROM jobs j
+      LEFT JOIN scores s
+        ON s.job_id = j.id
+        AND s.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
+      WHERE j.status != 'parse_failed'
+    )
+  `;
+
+  const filterWhere = `
+    WHERE (weighted_composite IS NULL OR weighted_composite >= ?)
+      AND (? = 0 OR COALESCE(dealbreaker_violations, '[]') = '[]')
+  `;
+
+  const total = (db.query(`
+    ${filteredFeedCte}
+    SELECT COUNT(*) as c FROM feed
+    ${filterWhere}
+  `).get(filters.minScore, hideDealbreakers) as { c: number }).c;
 
   const failedCount = (db.query(
     "SELECT COUNT(*) as c FROM jobs WHERE status = 'parse_failed'"
   ).get() as { c: number }).c;
 
   const rows = db.query(`
-    SELECT
-      j.*,
-      s.skills_score,
-      s.seniority_score,
-      s.domain_score,
-      s.location_score,
-      s.composite,
-      s.overqualified,
-      s.matches,
-      s.gaps,
-      s.summary,
-      (
-        COALESCE(s.skills_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_skills')
-        + COALESCE(s.seniority_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_seniority')
-        + COALESCE(s.domain_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_domain')
-        + COALESCE(s.location_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_location')
-      ) AS weighted_composite
-    FROM jobs j
-    LEFT JOIN scores s
-      ON s.job_id = j.id
-      AND s.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
-    WHERE j.status != 'parse_failed'
+    ${filteredFeedCte}
+    SELECT * FROM feed
+    ${filterWhere}
     ORDER BY
-      CASE WHEN s.id IS NULL THEN 1 ELSE 0 END,
+      CASE WHEN skills_score IS NULL THEN 1 ELSE 0 END,
       weighted_composite DESC,
-      j.is_new DESC,
-      j.created_at DESC
+      is_new DESC,
+      created_at DESC
     LIMIT ? OFFSET ?
-  `).all(limit, offset) as any[];
+  `).all(filters.minScore, hideDealbreakers, limit, offset) as any[];
 
   return {
     jobs: rows.map(deserializeJobFeedItem),
     total,
     hasMore: offset + limit < total,
     failedCount,
+  };
+}
+
+function normalizeFeedFilters(filters: JobFeedFilters | undefined): JobFeedFilters {
+  if (!filters) return DEFAULT_JOB_FEED_FILTERS;
+  return {
+    minScore: Number.isFinite(filters.minScore)
+      ? Math.max(0, Math.min(100, Math.round(filters.minScore)))
+      : DEFAULT_JOB_FEED_FILTERS.minScore,
+    hideDealbreakers: typeof filters.hideDealbreakers === "boolean"
+      ? filters.hideDealbreakers
+      : DEFAULT_JOB_FEED_FILTERS.hideDealbreakers,
   };
 }
 
@@ -99,13 +132,17 @@ export function getJobDetail(db: Database, jobId: number): JobDetail | null {
       s.overqualified,
       s.matches,
       s.gaps,
+      s.dealbreaker_violations,
       s.summary,
-      (
-        COALESCE(s.skills_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_skills')
-        + COALESCE(s.seniority_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_seniority')
-        + COALESCE(s.domain_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_domain')
-        + COALESCE(s.location_score, 0) * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_location')
-      ) AS weighted_composite
+      CASE
+        WHEN s.job_id IS NULL THEN NULL
+        ELSE (
+          s.skills_score * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_skills')
+          + s.seniority_score * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_seniority')
+          + s.domain_score * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_domain')
+          + s.location_score * (SELECT CAST(value AS REAL) / 100 FROM settings WHERE key = 'weights_location')
+        )
+      END AS weighted_composite
     FROM jobs j
     LEFT JOIN scores s
       ON s.job_id = j.id
@@ -244,6 +281,7 @@ function deserializeJobFeedItem(row: any): JobFeedItem {
     overqualified: row.overqualified == null ? null : !!row.overqualified,
     matches: safeParseJson(row.matches, []),
     gaps: safeParseJson(row.gaps, []),
+    dealbreaker_violations: safeParseJson(row.dealbreaker_violations, []),
     summary: row.summary ?? null,
   };
 }
