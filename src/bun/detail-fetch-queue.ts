@@ -1,7 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { Bunqueue } from "bunqueue/client";
-import type { Profile } from "../shared/types";
-import { LinkedInAdapter } from "./linkedin-adapter";
+import type { JobSourceId, Profile } from "../shared/types";
 import {
   setJobStatus,
   setJobDetails,
@@ -10,22 +9,23 @@ import {
   getTopNSetting,
 } from "./job-store";
 import { selectTopN, scoreJob } from "./heuristic-scorer";
+import type { JobSource } from "./sources/job-source";
 
-export type DetailJobData = { jobId: number; sourceId: string };
+export type DetailJobData = { jobId: number; sourceId: string; url?: string | null };
 
 export type DetailEvent =
-  | { type: "detail:queued"; payload: { count: number } }
-  | { type: "detail:fetching"; payload: { jobId: number; sourceId: string } }
-  | { type: "detail:ready"; payload: { jobId: number } }
-  | { type: "detail:failed"; payload: { jobId: number; message: string } }
-  | { type: "detail:circuit_open"; payload: {} }
-  | { type: "detail:complete"; payload: { ready: number; failed: number } };
+  | { type: "detail:queued"; payload: { count: number; source: JobSourceId } }
+  | { type: "detail:fetching"; payload: { jobId: number; sourceId: string; source: JobSourceId } }
+  | { type: "detail:ready"; payload: { jobId: number; source: JobSourceId } }
+  | { type: "detail:failed"; payload: { jobId: number; message: string; source: JobSourceId } }
+  | { type: "detail:circuit_open"; payload: { source: JobSourceId } }
+  | { type: "detail:complete"; payload: { ready: number; failed: number; source: JobSourceId } };
 
 export type EventSink = (event: DetailEvent) => void;
 
 export type DetailFetchQueueOptions = {
   db: Database;
-  adapter: LinkedInAdapter;
+  source: JobSource;
   emit?: EventSink;
   concurrency?: number;
   rateLimitMs?: number;
@@ -34,21 +34,14 @@ export type DetailFetchQueueOptions = {
   queueName?: string;
 };
 
-// Concurrency 5: LinkedIn guest tolerates ~10 req/min; with 2.5s rate-limit gap, 5 in-flight stays comfortably under.
-const DEFAULT_CONCURRENCY = 5;
-// 2.5s gap between fetches keeps us under LinkedIn's per-IP throttle while still draining 50 jobs in ~2 min.
-const DEFAULT_RATE_LIMIT_MS = 2500;
-// 30s per-job timeout: long enough for slow LinkedIn responses, short enough that a stuck fetch can't hang drain().
 const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
-// Trip the circuit after 5 consecutive failures so we stop hammering a broken source; reset after 30s probe.
 const CIRCUIT_THRESHOLD = 5;
 const CIRCUIT_RESET_MS = 30_000;
-// Statuses that should NOT be re-queued: in-flight or already done. DB is the source of truth for dedup.
 const NON_REQUEUEABLE_STATUSES = new Set(["queued", "fetching", "ready_for_scoring"]);
 
 export class DetailFetchQueue {
   private readonly db: Database;
-  private readonly adapter: LinkedInAdapter;
+  private readonly source: JobSource;
   private readonly emit: EventSink;
   private readonly bq: Bunqueue<DetailJobData, void>;
   private readonly fetchTimeoutMs: number;
@@ -59,25 +52,33 @@ export class DetailFetchQueue {
 
   constructor(opts: DetailFetchQueueOptions) {
     this.db = opts.db;
-    this.adapter = opts.adapter;
+    this.source = opts.source;
     this.emit = opts.emit ?? (() => {});
     this.fetchTimeoutMs = opts.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
 
-    this.bq = new Bunqueue<DetailJobData, void>(opts.queueName ?? "role-radar-detail-fetch", {
+    const concurrency = opts.concurrency ?? (opts.source.capabilities.mode === "native" ? 1 : opts.source.capabilities.detailConcurrency);
+    const rateLimitMs = opts.rateLimitMs ?? opts.source.capabilities.rateLimit.perMs;
+    const queueName = opts.queueName ?? `role-radar-detail-${opts.source.id}`;
+
+    this.bq = new Bunqueue<DetailJobData, void>(queueName, {
       embedded: true,
       dataPath: opts.dataPath,
-      concurrency: opts.concurrency ?? DEFAULT_CONCURRENCY,
+      concurrency,
       processor: async (job) => {
         await this.process(job.data);
       },
-      rateLimit: { max: 1, duration: opts.rateLimitMs ?? DEFAULT_RATE_LIMIT_MS },
+      rateLimit: { max: 1, duration: rateLimitMs },
       circuitBreaker: {
         threshold: CIRCUIT_THRESHOLD,
         resetTimeout: CIRCUIT_RESET_MS,
-        onOpen: () => this.emit({ type: "detail:circuit_open", payload: {} }),
+        onOpen: () => this.emit({ type: "detail:circuit_open", payload: { source: this.source.id } }),
       },
       defaultJobOptions: { attempts: 1, removeOnComplete: true, removeOnFail: true },
     });
+  }
+
+  get sourceId(): JobSourceId {
+    return this.source.id;
   }
 
   async enqueue(jobs: DetailJobData[]): Promise<void> {
@@ -92,7 +93,7 @@ export class DetailFetchQueue {
     for (const j of eligible) setJobStatus(this.db, j.jobId, "queued");
     this.enqueuedTotal += eligible.length;
     this.drained = false;
-    this.emit({ type: "detail:queued", payload: { count: eligible.length } });
+    this.emit({ type: "detail:queued", payload: { count: eligible.length, source: this.source.id } });
 
     try {
       await this.bq.addBulk(
@@ -114,7 +115,7 @@ export class DetailFetchQueue {
       await new Promise((r) => setTimeout(r, 20));
     }
     this.drained = true;
-    this.emit({ type: "detail:complete", payload: { ready: this.ready, failed: this.failed } });
+    this.emit({ type: "detail:complete", payload: { ready: this.ready, failed: this.failed, source: this.source.id } });
   }
 
   async close(): Promise<void> {
@@ -123,20 +124,30 @@ export class DetailFetchQueue {
 
   private async process(data: DetailJobData): Promise<void> {
     setJobStatus(this.db, data.jobId, "fetching");
-    this.emit({ type: "detail:fetching", payload: data });
+    this.emit({ type: "detail:fetching", payload: { ...data, source: this.source.id } });
     try {
+      if (!this.source.fetchDetails) {
+        // Source declared listHasDescription=true; nothing to fetch. Mark ready.
+        setJobStatus(this.db, data.jobId, "ready_for_scoring");
+        this.ready++;
+        this.emit({ type: "detail:ready", payload: { jobId: data.jobId, source: this.source.id } });
+        return;
+      }
       const detail = await withTimeout(
-        this.adapter.fetchDetails(data.sourceId),
+        this.source.fetchDetails({ sourceId: data.sourceId, url: data.url ?? null }),
         this.fetchTimeoutMs,
         `detail fetch timed out after ${this.fetchTimeoutMs}ms`,
       );
       setJobDetails(this.db, data.jobId, detail);
       this.ready++;
-      this.emit({ type: "detail:ready", payload: { jobId: data.jobId } });
+      this.emit({ type: "detail:ready", payload: { jobId: data.jobId, source: this.source.id } });
     } catch (err: any) {
       setJobStatus(this.db, data.jobId, "fetch_failed");
       this.failed++;
-      this.emit({ type: "detail:failed", payload: { jobId: data.jobId, message: err?.message ?? String(err) } });
+      this.emit({
+        type: "detail:failed",
+        payload: { jobId: data.jobId, message: err?.message ?? String(err), source: this.source.id },
+      });
       throw err;
     }
   }
@@ -152,26 +163,45 @@ function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
   });
 }
 
+export type QueueDispatcher = {
+  getQueue(sourceId: JobSourceId): DetailFetchQueue | undefined;
+  queues(): DetailFetchQueue[];
+};
+
 export async function runHeuristicAndQueueDetails(
   db: Database,
   profile: Profile,
-  queue: DetailFetchQueue,
+  dispatcher: QueueDispatcher,
 ): Promise<{ scored: number; queued: number }> {
   const candidates = getJobsForHeuristicScoring(db);
   if (candidates.length === 0) return { scored: 0, queued: 0 };
 
-  const scores = candidates.map(j => ({ jobId: j.id, score: scoreJob(j, profile) }));
+  const scores = candidates.map((j) => ({ jobId: j.id, score: scoreJob(j, profile) }));
   updateHeuristicScores(db, scores);
 
   const topN = getTopNSetting(db);
   const selected = selectTopN(candidates, profile, topN);
   if (selected.length === 0) return { scored: candidates.length, queued: 0 };
 
-  const enqueueData = selected
-    .filter(j => !!j.source_id)
-    .map(j => ({ jobId: j.id, sourceId: j.source_id }));
-  await queue.enqueue(enqueueData);
-  await queue.drain();
+  const grouped = new Map<JobSourceId, DetailJobData[]>();
+  for (const job of selected) {
+    if (!job.source_id) continue;
+    const arr = grouped.get(job.source as JobSourceId) ?? [];
+    arr.push({ jobId: job.id, sourceId: job.source_id, url: job.url });
+    grouped.set(job.source as JobSourceId, arr);
+  }
 
-  return { scored: candidates.length, queued: enqueueData.length };
+  let queued = 0;
+  for (const [sourceId, items] of grouped) {
+    const queue = dispatcher.getQueue(sourceId);
+    if (!queue) continue;
+    await queue.enqueue(items);
+    queued += items.length;
+  }
+
+  for (const queue of dispatcher.queues()) {
+    await queue.drain();
+  }
+
+  return { scored: candidates.length, queued };
 }

@@ -1,5 +1,5 @@
 import { BrowserWindow, BrowserView, Utils } from "electrobun/bun";
-import { StructuredResumeSchema, type AppRPCSchema, type SearchQuery } from "../shared/types";
+import { StructuredResumeSchema, type AppRPCSchema, type JobSourceId, type SearchQuery } from "../shared/types";
 import { getDb, runMigrations, closeDb } from "./db";
 import { GeminiClient } from "./gemini-client";
 import { extractText, parseResume } from "./resume-parser";
@@ -9,7 +9,7 @@ import { generateSearchQueries, getStoredSearchQueries } from "./query-generator
 import { getResumesDir } from "./paths";
 import { LinkedInAdapter, searchCities } from "./linkedin-adapter";
 import { storeJobs, getJobFeed, getJobDetail, getJobReasoning, storeSearchQuery } from "./job-store";
-import { DetailFetchQueue, runHeuristicAndQueueDetails, type DetailEvent } from "./detail-fetch-queue";
+import { DetailFetchQueue, runHeuristicAndQueueDetails, type DetailEvent, type QueueDispatcher } from "./detail-fetch-queue";
 import { runScoringPipeline, resolveSelectedModel } from "./scoring-pipeline";
 import { getScoreWeights, updateScoreWeights } from "./score-weight-settings";
 import { getJobFeedFilters, updateJobFeedFilters } from "./feed-filter-settings";
@@ -19,6 +19,10 @@ import { invalidateScoresAndRequeueJobs } from "./scoring-state";
 import type { SelectorConfig } from "../shared/types";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { createSourceRegistry, type SourceRegistry } from "./sources/registry";
+import { runSearchOrchestration } from "./search-orchestrator";
+import { listEnabledSources } from "./source-health-store";
+import type { NormalizedQuery } from "./sources/job-source";
 
 function loadSelectors(): SelectorConfig {
   const candidates = [
@@ -39,7 +43,8 @@ function loadSelectors(): SelectorConfig {
 
 const linkedInSelectors = loadSelectors();
 
-let detailQueue: DetailFetchQueue | null = null;
+let sourceRegistry: SourceRegistry | null = null;
+const detailQueues = new Map<JobSourceId, DetailFetchQueue>();
 let rendererReady = false;
 let startupScoringResumeRequested = false;
 let startupScoringResumeStarted = false;
@@ -54,30 +59,40 @@ function safePipelineUpdate(event: { type: string; payload: unknown }): void {
   }
 }
 
-function getDetailQueue(): DetailFetchQueue {
-  if (!detailQueue) {
-    const detailAdapter = new LinkedInAdapter({
-      selectors: linkedInSelectors,
-      maxAgeSecs: (linkedInSelectors.maxAgeDays ?? 7) * 86400,
-      delayMs: 0,
-    });
-    const dataDir = Utils.paths.userData;
-    mkdirSync(dataDir, { recursive: true });
-    detailQueue = new DetailFetchQueue({
-      db: getDb(),
-      adapter: detailAdapter,
-      dataPath: join(dataDir, "bunqueue.db"),
-      emit: (e: DetailEvent) => safePipelineUpdate(e),
-    });
+function getRegistry(): SourceRegistry {
+  if (!sourceRegistry) {
+    sourceRegistry = createSourceRegistry({ linkedInSelectors });
   }
-  return detailQueue;
+  return sourceRegistry;
 }
+
+function getDetailQueue(sourceId: JobSourceId): DetailFetchQueue {
+  let queue = detailQueues.get(sourceId);
+  if (queue) return queue;
+  const source = getRegistry().get(sourceId);
+  if (!source) throw new Error(`Unknown job source: ${sourceId}`);
+  const dataDir = Utils.paths.userData;
+  mkdirSync(dataDir, { recursive: true });
+  queue = new DetailFetchQueue({
+    db: getDb(),
+    source,
+    dataPath: join(dataDir, `bunqueue-${sourceId}.db`),
+    emit: (e: DetailEvent) => safePipelineUpdate(e),
+  });
+  detailQueues.set(sourceId, queue);
+  return queue;
+}
+
+const queueDispatcher: QueueDispatcher = {
+  getQueue: (id) => detailQueues.get(id) ?? getDetailQueue(id),
+  queues: () => Array.from(detailQueues.values()),
+};
 
 async function runFetchPipeline(profileId: number): Promise<void> {
   const profile = getProfile(getDb());
   if (!profile || profile.id !== profileId) return;
   try {
-    const result = await runHeuristicAndQueueDetails(getDb(), profile, getDetailQueue());
+    const result = await runHeuristicAndQueueDetails(getDb(), profile, queueDispatcher);
     console.log(`[detail] scored=${result.scored} queued=${result.queued}`);
     await runScorePipeline(profile);
   } catch (err: any) {
@@ -129,55 +144,49 @@ if (pdfRow?.resume_pdf_path && !existsSync(pdfRow.resume_pdf_path)) {
 let lastPagesPerQuery = 0;
 let lastSearchTime = 0;
 
+const MAX_JOBS = 200;
+
+function toNormalizedQuery(q: SearchQuery & { strategy?: string }): NormalizedQuery {
+  return {
+    keywords: q.keywords,
+    location: q.location ?? null,
+    experienceLevel: q.experienceLevel ?? null,
+    remote: !!q.remote,
+  };
+}
+
 async function runGeneratedSearches(queries: (SearchQuery & { strategy?: string })[], startedAt: number): Promise<number> {
-  const maxAgeSecs = (linkedInSelectors.maxAgeDays ?? 7) * 86400;
-  const hasRemote = queries.some((q) => q.remote);
-  const avgKeywords = Math.ceil(queries.reduce((sum, q) => sum + q.keywords.length, 0) / Math.max(queries.length, 1));
-  const searchesPerQuery = avgKeywords * (hasRemote ? 2 : 1);
-  const pagesPerQuery = Math.max(1, Math.floor(200 / (Math.max(queries.length, 1) * searchesPerQuery * 10)));
-  lastPagesPerQuery = pagesPerQuery;
   lastSearchTime = Date.now();
-  console.log(`[queries] pagesPerQuery=${pagesPerQuery} (${queries.length} queries, ~${avgKeywords} keywords, remote=${hasRemote})`);
+  const enabled = listEnabledSources(getDb());
+  console.log(`[queries] orchestrator queries=${queries.length} sources=${enabled.length}`);
 
-  const adapter = new LinkedInAdapter({
-    selectors: linkedInSelectors,
-    maxAgeSecs,
-    pagesPerQuery,
-  });
-
-  const MAX_JOBS = 200;
-  let totalDiscovered = 0;
-  let queriesRun = 0;
   for (let i = 0; i < queries.length; i++) {
-    if (totalDiscovered >= MAX_JOBS) {
-      console.log(`[queries] Reached ${MAX_JOBS} job cap, skipping remaining queries`);
-      break;
-    }
-    const query = queries[i]!;
-    const strategy = query.strategy ?? "precise";
-    rpc.send.pipelineUpdate({
+    const q = queries[i]!;
+    const strategy = q.strategy ?? "precise";
+    safePipelineUpdate({
       type: "queries:progress",
-      payload: { current: i + 1, total: queries.length, query: query.keywords.join(", "), strategy },
-    });
-    rpc.send.pipelineUpdate({ type: "job:searching", payload: { query } });
-    console.log(`[queries] Query ${i + 1}/${queries.length} [${strategy}]: ${query.keywords.join(", ")}`);
-    queriesRun++;
-    await adapter.search(query, (batch) => {
-      const result = storeJobs(getDb(), batch);
-      totalDiscovered += result.inserted;
-      rpc.send.pipelineUpdate({ type: "job:search:complete", payload: { total: result.inserted } });
-      return result;
+      payload: { current: i + 1, total: queries.length, query: q.keywords.join(", "), strategy, source: "linkedin" },
     });
   }
 
-  console.log(`[queries] Complete: ${totalDiscovered} new jobs (${((performance.now() - startedAt) / 1000).toFixed(1)}s)`);
-  rpc.send.pipelineUpdate({
-    type: "queries:search:complete",
-    payload: { queriesRun, jobsDiscovered: totalDiscovered },
+  const result = await runSearchOrchestration({
+    db: getDb(),
+    registry: getRegistry(),
+    queries: queries.map(toNormalizedQuery),
+    maxJobs: MAX_JOBS,
+    enabledSources: enabled,
+    emit: (event) => safePipelineUpdate(event),
   });
+
+  console.log(`[queries] Complete: ${result.totalInserted} new jobs across ${result.perSource.size} sources (${((performance.now() - startedAt) / 1000).toFixed(1)}s)`);
+  safePipelineUpdate({
+    type: "queries:search:complete",
+    payload: { queriesRun: queries.length, jobsDiscovered: result.totalInserted },
+  });
+
   const profile = getProfile(getDb());
   if (profile) await runFetchPipeline(profile.id);
-  return totalDiscovered;
+  return result.totalInserted;
 }
 
 function getGemini(): GeminiClient | null {
@@ -384,7 +393,7 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
       },
       searchJobs: async (query) => {
         try {
-          rpc.send.pipelineUpdate({ type: "job:searching", payload: { query } });
+          safePipelineUpdate({ type: "job:searching", payload: { query, source: "linkedin" } });
           console.log(`[jobs] Searching: ${query.keywords.join(", ")} in "${query.location ?? "anywhere"}"`);
           const t = performance.now();
 
@@ -406,17 +415,17 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
             console.warn("[jobs] Search without profile; query not logged");
           }
 
-          rpc.send.pipelineUpdate({
+          safePipelineUpdate({
             type: "job:search:complete",
-            payload: { total: result.inserted },
+            payload: { total: result.inserted, source: "linkedin", inserted: result.inserted, failed: 0 },
           });
 
           if (profile) await runFetchPipeline(profile.id);
         } catch (err: any) {
           console.error(`[jobs] Search failed:`, err.message);
-          rpc.send.pipelineUpdate({
+          safePipelineUpdate({
             type: "job:search:error",
-            payload: { message: err.message ?? "Search failed" },
+            payload: { message: err.message ?? "Search failed", source: "linkedin" },
           });
         }
       },
@@ -524,7 +533,10 @@ const rpc = BrowserView.defineRPC<AppRPCSchema>({
             await adapter.search(query, (batch) => {
               const result = storeJobs(getDb(), batch);
               totalDiscovered += result.inserted;
-              rpc.send.pipelineUpdate({ type: "job:search:complete", payload: { total: result.inserted } });
+              safePipelineUpdate({
+                type: "job:search:complete",
+                payload: { total: result.inserted, source: "linkedin", inserted: result.inserted, failed: 0 },
+              });
               return result;
             });
           }
@@ -620,10 +632,10 @@ const win = new BrowserWindow({
 requestStartupScoringResume();
 
 function shutdown() {
-  if (detailQueue) {
-    detailQueue.close().catch(() => {});
-    detailQueue = null;
+  for (const queue of detailQueues.values()) {
+    queue.close().catch(() => {});
   }
+  detailQueues.clear();
   closeDb();
 }
 

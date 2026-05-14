@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { shutdownManager } from "bunqueue/client";
-import { DetailFetchQueue, runHeuristicAndQueueDetails } from "../detail-fetch-queue";
-import type { LinkedInAdapter } from "../linkedin-adapter";
+import { DetailFetchQueue, runHeuristicAndQueueDetails, type QueueDispatcher } from "../detail-fetch-queue";
+import type { JobSource, JobSourceCapabilities } from "../sources/job-source";
 import type { ParsedJobDetail, Profile } from "../../shared/types";
 
 const migrationSql = [
@@ -80,16 +80,35 @@ describe("pipeline integration: heuristic + detail fetch", () => {
     seedJobs(db, 200);
     db.query("UPDATE settings SET value = '20' WHERE key = 'top_n_detail_fetch'").run();
 
-    const adapter = { fetchDetails: mock(async () => okDetail) } as unknown as LinkedInAdapter;
+    const caps: JobSourceCapabilities = {
+      mode: "http",
+      hasDetail: true,
+      listHasDescription: false,
+      postedAtQuality: "exact",
+      pageSize: 10,
+      rateLimit: { perMs: 1 },
+      detailConcurrency: 5,
+      enabledByDefault: true,
+    };
+    const source: JobSource = {
+      id: "linkedin",
+      capabilities: caps,
+      async search() { return { jobs: [], inserted: 0, failed: 0 }; },
+      fetchDetails: mock(async () => okDetail) as any,
+    };
     const q = new DetailFetchQueue({
       db,
-      adapter,
+      source,
       dataPath: join(tmpDir, "queue.db"),
       queueName: "integration",
       rateLimitMs: 1,
     });
+    const dispatcher: QueueDispatcher = {
+      getQueue: (id) => (id === "linkedin" ? q : undefined),
+      queues: () => [q],
+    };
 
-    const result = await runHeuristicAndQueueDetails(db, profile, q);
+    const result = await runHeuristicAndQueueDetails(db, profile, dispatcher);
     expect(result.scored).toBe(200);
     expect(result.queued).toBe(20);
 

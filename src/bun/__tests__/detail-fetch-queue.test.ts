@@ -5,7 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { shutdownManager } from "bunqueue/client";
 import { DetailFetchQueue, type DetailEvent } from "../detail-fetch-queue";
-import type { LinkedInAdapter } from "../linkedin-adapter";
+import type { JobSource, JobSourceCapabilities } from "../sources/job-source";
 import type { ParsedJobDetail } from "../../shared/types";
 
 const migrationSql = [
@@ -37,9 +37,27 @@ const okDetail: ParsedJobDetail = {
   industry: "Software",
 };
 
-function mockAdapter(impl?: (sourceId: string) => Promise<ParsedJobDetail>): LinkedInAdapter {
+const mockCaps: JobSourceCapabilities = {
+  mode: "http",
+  hasDetail: true,
+  listHasDescription: false,
+  postedAtQuality: "exact",
+  pageSize: 10,
+  rateLimit: { perMs: 1 },
+  detailConcurrency: 5,
+  enabledByDefault: true,
+};
+
+function mockSource(impl?: (sourceId: string) => Promise<ParsedJobDetail>): JobSource {
   const fn = impl ?? (async () => okDetail);
-  return { fetchDetails: mock(fn) } as unknown as LinkedInAdapter;
+  return {
+    id: "linkedin",
+    capabilities: mockCaps,
+    async search() {
+      return { jobs: [], inserted: 0, failed: 0 };
+    },
+    fetchDetails: mock((j: { sourceId: string }) => fn(j.sourceId)) as any,
+  };
 }
 
 let tmpDir: string;
@@ -61,7 +79,7 @@ describe("DetailFetchQueue", () => {
 
     const q = new DetailFetchQueue({
       db,
-      adapter: mockAdapter(),
+      source: mockSource(),
       dataPath: join(tmpDir, "queue.db"),
       queueName: "test-enqueue",
       rateLimitMs: 1,
@@ -82,7 +100,7 @@ describe("DetailFetchQueue", () => {
     const events: DetailEvent[] = [];
     const q = new DetailFetchQueue({
       db,
-      adapter: mockAdapter(),
+      source: mockSource(),
       emit: (e) => events.push(e),
       dataPath: join(tmpDir, "queue.db"),
       queueName: "test-happy",
@@ -113,7 +131,7 @@ describe("DetailFetchQueue", () => {
     const events: DetailEvent[] = [];
     const q = new DetailFetchQueue({
       db,
-      adapter: mockAdapter(async () => { throw new Error("network down"); }),
+      source: mockSource(async () => { throw new Error("network down"); }),
       emit: (e) => events.push(e),
       dataPath: join(tmpDir, "queue.db"),
       queueName: "test-fail",
@@ -143,7 +161,7 @@ describe("DetailFetchQueue", () => {
     let calls = 0;
     const q = new DetailFetchQueue({
       db,
-      adapter: mockAdapter(async () => { calls++; return okDetail; }),
+      source: mockSource(async () => { calls++; return okDetail; }),
       dataPath: join(tmpDir, "queue.db"),
       queueName: "test-dbdedup",
       rateLimitMs: 1,
@@ -168,7 +186,7 @@ describe("DetailFetchQueue", () => {
 
     const q = new DetailFetchQueue({
       db,
-      adapter: mockAdapter(),
+      source: mockSource(),
       dataPath: join(tmpDir, "queue.db"),
       queueName: "test-rollback",
       rateLimitMs: 1,
@@ -192,7 +210,7 @@ describe("DetailFetchQueue", () => {
     const events: DetailEvent[] = [];
     const q = new DetailFetchQueue({
       db,
-      adapter: mockAdapter(),
+      source: mockSource(),
       emit: (e) => events.push(e),
       dataPath: join(tmpDir, "queue.db"),
       queueName: "test-doubledrain",
@@ -216,7 +234,7 @@ describe("DetailFetchQueue", () => {
     const events: DetailEvent[] = [];
     const q = new DetailFetchQueue({
       db,
-      adapter: mockAdapter(),
+      source: mockSource(),
       emit: (e) => events.push(e),
       dataPath: join(tmpDir, "queue.db"),
       queueName: "test-bulk",
