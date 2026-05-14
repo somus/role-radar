@@ -15,6 +15,7 @@ const migrationSql = [
   readFileSync(join(import.meta.dir, "../../../migrations/004_job_status_index.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/005_feed_filters_dealbreakers.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/006_profile_resume_json.sql"), "utf-8"),
+  readFileSync(join(import.meta.dir, "../../../migrations/007_multi_source.sql"), "utf-8"),
 ].join("\n");
 
 function freshDb(): Database {

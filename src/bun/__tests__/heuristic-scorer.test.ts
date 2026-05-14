@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { scoreJob, selectTopN } from "../heuristic-scorer";
 import type { Profile, Job } from "../../shared/types";
+import { makeTestJob } from "./test-utils";
 
 const baseProfile: Profile = {
   id: 1,
@@ -23,28 +24,16 @@ const baseProfile: Profile = {
 const NOW = new Date("2026-05-09T00:00:00Z");
 
 function mkJob(overrides: Partial<Job> = {}): Job {
-  return {
-    id: 1,
-    source: "linkedin",
+  return makeTestJob({
     source_id: "abc",
-    title: "Backend Engineer",
-    company: "Acme",
-    location: "San Francisco, CA",
     url: null,
     posted_at: NOW.toISOString(),
-    status: "discovered",
-    description: null,
-    seniority_level: null,
-    employment_type: null,
-    job_function: null,
-    industry: null,
-    heuristic_score: null,
-    resume_generated: false,
-    is_new: true,
+    posted_at_ts: NOW.getTime(),
+    posted_at_confidence: "exact",
     created_at: "",
     updated_at: "",
     ...overrides,
-  };
+  });
 }
 
 describe("scoreJob — title similarity", () => {

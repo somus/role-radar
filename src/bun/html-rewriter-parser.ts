@@ -1,4 +1,5 @@
 import type { DetailSelectorConfig, ParsedJob, ParsedJobDetail, SelectorConfig } from "../shared/types";
+import { normalizePostedAt } from "./posted-at-normalizer";
 
 export async function parseSearchResults(
   html: string,
@@ -220,14 +221,20 @@ function finalize(partial: Partial<ParsedJob>): ParsedJob {
   const title = partial.title?.trim() || "";
   const sourceId = partial.sourceId || "";
   const hasCriticalFields = title.length > 0 && sourceId.length > 0;
+  const postedRaw = partial.postedAt ?? null;
+  const { confidence } = normalizePostedAt(postedRaw);
 
   return {
+    source: "linkedin",
     sourceId,
     title,
     company: partial.company?.trim() || null,
     location: partial.location?.trim() || null,
     url: partial.url || null,
-    postedAt: partial.postedAt || null,
+    postedAt: postedRaw,
+    postedText: postedRaw,
+    postedAtConfidence: confidence,
+    descriptionExcerptOnly: false,
     status: hasCriticalFields ? "discovered" : "parse_failed",
   };
 }

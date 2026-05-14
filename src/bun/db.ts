@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { Utils } from "electrobun/bun";
 import { mkdirSync } from "fs";
+import { JOB_SOURCE_IDS } from "../shared/types";
 
 let db: Database;
 
@@ -68,7 +69,34 @@ export function runMigrations(): { applied: number } {
     count++;
   }
 
+  ensureSourceCoverage(database);
+
   return { applied: count };
+}
+
+function ensureSourceCoverage(database: Database): void {
+  // Guard against drift between JOB_SOURCE_IDS (TS const) and migration-seeded
+  // source_health / user_source_settings rows. If any source id from the const
+  // is missing, insert defaults.
+  const tableExists = (name: string) =>
+    !!database
+      .query("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
+      .get(name);
+
+  if (!tableExists("source_health") || !tableExists("user_source_settings")) {
+    return;
+  }
+
+  const insertHealth = database.query(
+    "INSERT OR IGNORE INTO source_health (source, status) VALUES (?, 'ok')"
+  );
+  const insertSettings = database.query(
+    "INSERT OR IGNORE INTO user_source_settings (source, enabled) VALUES (?, 1)"
+  );
+  for (const source of JOB_SOURCE_IDS) {
+    insertHealth.run(source);
+    insertSettings.run(source);
+  }
 }
 
 export function closeDb() {

@@ -130,15 +130,17 @@ export type PipelineEvent =
   | { type: "enrichment:extracting"; payload: null }
   | { type: "enrichment:complete"; payload: { profile: Profile } }
   | { type: "enrichment:error"; payload: { message: string } }
-  | { type: "job:searching"; payload: { query: SearchQuery } }
-  | { type: "job:discovered"; payload: { count: number } }
-  | { type: "job:search:complete"; payload: { total: number } }
-  | { type: "job:search:error"; payload: { message: string } }
+  | { type: "job:searching"; payload: { query: SearchQuery; source: JobSourceId } }
+  | { type: "job:discovered"; payload: { count: number; source: JobSourceId } }
+  | { type: "job:search:complete"; payload: { total: number; source: JobSourceId; inserted: number; failed: number } }
+  | { type: "job:search:error"; payload: { message: string; source: JobSourceId } }
   | { type: "queries:generating"; payload: null }
   | { type: "queries:generated"; payload: { count: number } }
-  | { type: "queries:progress"; payload: { current: number; total: number; query: string; strategy: string } }
+  | { type: "queries:progress"; payload: { current: number; total: number; query: string; strategy: string; source: JobSourceId } }
   | { type: "queries:search:complete"; payload: { queriesRun: number; jobsDiscovered: number } }
   | { type: "queries:error"; payload: { message: string } }
+  | { type: "source:quarantined"; payload: { source: JobSourceId; reason: string } }
+  | { type: "source:restored"; payload: { source: JobSourceId } }
   | { type: "fetchmore:searching"; payload: null }
   | { type: "fetchmore:complete"; payload: { jobsDiscovered: number } }
   | { type: "fetchmore:error"; payload: { message: string } }
@@ -272,15 +274,40 @@ export const EnrichmentExtractionSchema = z.object({
 
 export type EnrichmentExtractionResult = z.infer<typeof EnrichmentExtractionSchema>;
 
+export const JOB_SOURCE_IDS = [
+  "linkedin",
+  "naukri",
+  "indeed",
+  "foundit",
+  "shine",
+  "timesjobs",
+  "freshersworld",
+  "internshala",
+  "cutshort",
+  "apna",
+] as const;
+
+export type JobSourceId = typeof JOB_SOURCE_IDS[number];
+
+export type PostedAtConfidence = "exact" | "relative" | "estimated" | "missing";
+
+export type SortMode = "best_match" | "most_recent";
+
 export type Job = {
   id: number;
-  source: string;
+  source: JobSourceId;
   source_id: string;
   title: string;
   company: string | null;
   location: string | null;
   url: string | null;
   posted_at: string | null;
+  posted_at_ts: number | null;
+  posted_at_confidence: PostedAtConfidence;
+  posted_text: string | null;
+  description_excerpt_only: boolean;
+  canonical_job_id: number | null;
+  dedup_key: string | null;
   status: string;
   description: string | null;
   seniority_level: string | null;
@@ -295,12 +322,16 @@ export type Job = {
 };
 
 export type ParsedJob = {
+  source: JobSourceId;
   sourceId: string;
   title: string;
   company: string | null;
   location: string | null;
   url: string | null;
   postedAt: string | null;
+  postedText: string | null;
+  postedAtConfidence: PostedAtConfidence;
+  descriptionExcerptOnly: boolean;
   status: "discovered" | "parse_failed";
 };
 
@@ -345,12 +376,16 @@ export type FitWeights = {
 export type JobFeedFilters = {
   minScore: number;
   hideDealbreakers: boolean;
+  enabledSources: JobSourceId[];
+  sortMode: SortMode;
 };
 
-export const DEFAULT_JOB_FEED_FILTERS: JobFeedFilters = {
+export const DEFAULT_JOB_FEED_FILTERS: JobFeedFilters = Object.freeze({
   minScore: 0,
   hideDealbreakers: false,
-};
+  enabledSources: Object.freeze([...JOB_SOURCE_IDS]) as unknown as JobSourceId[],
+  sortMode: "best_match",
+}) as JobFeedFilters;
 
 export type ScoreGroup = "Top" | "Good" | "Others";
 

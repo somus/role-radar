@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
-import { DEFAULT_JOB_FEED_FILTERS, type Job, type JobDetail, type JobFeedFilters, type JobFeedItem, type JobFeedParams, type JobFeedResult, type JobReasoning, type ParsedJob, type ParsedJobDetail, type SearchQuery } from "../shared/types";
+import { DEFAULT_JOB_FEED_FILTERS, JOB_SOURCE_IDS, type Job, type JobDetail, type JobFeedFilters, type JobFeedItem, type JobFeedParams, type JobFeedResult, type JobReasoning, type JobSourceId, type ParsedJob, type ParsedJobDetail, type SearchQuery } from "../shared/types";
 import { scoreGroup } from "../shared/score-weights";
+import { normalizePostedAt } from "./posted-at-normalizer";
 
 export function storeJobs(
   db: Database,
@@ -10,18 +11,28 @@ export function storeJobs(
 
   const insert = db.transaction((batch: ParsedJob[]) => {
     const stmt = db.query(`
-      INSERT OR IGNORE INTO jobs (source, source_id, title, company, location, url, posted_at, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO jobs (
+        source, source_id, title, company, location, url,
+        posted_at, posted_at_ts, posted_at_confidence, posted_text,
+        description_excerpt_only, status
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const job of batch) {
+      const rawPosted = job.postedText ?? job.postedAt;
+      const { postedAtTs, confidence } = normalizePostedAt(rawPosted);
       stmt.run(
-        "linkedin",
+        job.source,
         job.sourceId,
         job.title,
         job.company,
         job.location,
         job.url,
         job.postedAt,
+        postedAtTs,
+        job.postedAtConfidence ?? confidence,
+        rawPosted,
+        job.descriptionExcerptOnly ? 1 : 0,
         job.status
       );
     }
@@ -41,6 +52,7 @@ export function getJobFeed(
   const { limit, offset } = params;
   const filters = normalizeFeedFilters(params.filters);
   const hideDealbreakers = filters.hideDealbreakers ? 1 : 0;
+  const sourcePlaceholders = filters.enabledSources.map(() => "?").join(", ");
 
   const filteredFeedCte = `
     WITH feed AS (
@@ -70,6 +82,8 @@ export function getJobFeed(
         ON s.job_id = j.id
         AND s.profile_id = (SELECT id FROM profiles ORDER BY id LIMIT 1)
       WHERE j.status != 'parse_failed'
+        AND COALESCE(j.canonical_job_id, j.id) = j.id
+        AND j.source IN (${sourcePlaceholders})
     )
   `;
 
@@ -78,27 +92,38 @@ export function getJobFeed(
       AND (? = 0 OR COALESCE(dealbreaker_violations, '[]') = '[]')
   `;
 
+  const orderBy = filters.sortMode === "most_recent"
+    ? `ORDER BY
+        CASE WHEN posted_at_confidence = 'missing' THEN 1 ELSE 0 END,
+        posted_at_ts DESC,
+        CASE WHEN skills_score IS NULL THEN 1 ELSE 0 END,
+        created_at DESC`
+    : `ORDER BY
+        CASE WHEN skills_score IS NULL THEN 1 ELSE 0 END,
+        weighted_composite DESC,
+        is_new DESC,
+        posted_at_ts DESC,
+        created_at DESC`;
+
+  const countParams = [...filters.enabledSources, filters.minScore, hideDealbreakers];
   const total = (db.query(`
     ${filteredFeedCte}
     SELECT COUNT(*) as c FROM feed
     ${filterWhere}
-  `).get(filters.minScore, hideDealbreakers) as { c: number }).c;
+  `).get(...countParams) as { c: number }).c;
 
   const failedCount = (db.query(
     "SELECT COUNT(*) as c FROM jobs WHERE status = 'parse_failed'"
   ).get() as { c: number }).c;
 
+  const rowParams = [...filters.enabledSources, filters.minScore, hideDealbreakers, limit, offset];
   const rows = db.query(`
     ${filteredFeedCte}
     SELECT * FROM feed
     ${filterWhere}
-    ORDER BY
-      CASE WHEN skills_score IS NULL THEN 1 ELSE 0 END,
-      weighted_composite DESC,
-      is_new DESC,
-      created_at DESC
+    ${orderBy}
     LIMIT ? OFFSET ?
-  `).all(filters.minScore, hideDealbreakers, limit, offset) as any[];
+  `).all(...rowParams) as any[];
 
   return {
     jobs: rows.map(deserializeJobFeedItem),
@@ -108,7 +133,7 @@ export function getJobFeed(
   };
 }
 
-function normalizeFeedFilters(filters: JobFeedFilters | undefined): JobFeedFilters {
+export function normalizeFeedFilters(filters: JobFeedFilters | undefined): JobFeedFilters {
   if (!filters) return DEFAULT_JOB_FEED_FILTERS;
   return {
     minScore: Number.isFinite(filters.minScore)
@@ -117,6 +142,12 @@ function normalizeFeedFilters(filters: JobFeedFilters | undefined): JobFeedFilte
     hideDealbreakers: typeof filters.hideDealbreakers === "boolean"
       ? filters.hideDealbreakers
       : DEFAULT_JOB_FEED_FILTERS.hideDealbreakers,
+    enabledSources: Array.isArray(filters.enabledSources) && filters.enabledSources.length > 0
+      ? filters.enabledSources
+      : DEFAULT_JOB_FEED_FILTERS.enabledSources,
+    sortMode: filters.sortMode === "most_recent" || filters.sortMode === "best_match"
+      ? filters.sortMode
+      : DEFAULT_JOB_FEED_FILTERS.sortMode,
   };
 }
 
@@ -249,6 +280,12 @@ function deserializeJob(row: any): Job {
     location: row.location,
     url: row.url,
     posted_at: row.posted_at,
+    posted_at_ts: row.posted_at_ts ?? null,
+    posted_at_confidence: row.posted_at_confidence ?? "missing",
+    posted_text: row.posted_text ?? null,
+    description_excerpt_only: !!row.description_excerpt_only,
+    canonical_job_id: row.canonical_job_id ?? null,
+    dedup_key: row.dedup_key ?? null,
     status: row.status,
     description: row.description,
     seniority_level: row.seniority_level,

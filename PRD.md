@@ -1,7 +1,7 @@
 # Role Radar — Product Requirements Document
 
 **Product:** Personalized Job Discovery + Fit Scoring + Resume Generator
-**Phase 1 Scope:** LinkedIn
+**Phase 1 Scope:** Multi-source — LinkedIn shipped; 9 India-first boards (Naukri, Indeed, Foundit, Shine, TimesJobs, Freshersworld, Internshala, Cutshort, Apna) in flight behind a `JobSource` interface
 **Deployment:** Single-user local desktop app (Electrobun)
 **Core Principle:** Only show scores after full job detail analysis (LLM-based). No heuristic/embedding scores shown to users.
 
@@ -76,7 +76,7 @@ A local-first application that ingests a user's resume, builds a rich profession
 3. **Profile Enrichment** — LLM generates 5 questions from parsed profile covering career intent + dealbreakers, problem-solving stories from past roles, and technical depth. Free-text answers with guided prompts. LLM extracts structured enrichment data. Re-answerable anytime from profile page. Interface: `generateQuestions(profile) → Question[]`, `enrichProfile(profile, answers) → EnrichedProfile`.
 4. **Profile Store** — CRUD for profiles in SQLite, including raw extracted resume text, original PDF path, and corrected structured resume JSON. On update (via PDF re-upload, form edit, or re-enrichment), triggers full pipeline re-run: regenerate queries → new search → re-score all jobs.
 5. **Query Generator** — LLM generates 3–5 structured search query objects (keywords, location, experience level) from profile. Code maps objects to LinkedIn API parameters. Interface: `generate(profile) → SearchQuery[]`.
-6. **LinkedIn Adapter** — Implements `JobSourceAdapter` interface. Search via `/jobs-guest/jobs/api/seeMoreJobPostings/search`, detail fetch via `/jobs/view/{jobId}`. HTML parsing with Cheerio using JSON-configurable selectors (not hardcoded). Validates parsed output — missing critical fields = `parse_failed` status. Conservative rate limiting: 2–3s delay between requests, exponential backoff (30s base) on 429/403, circuit-break after 5 failures via bunqueue.
+6. **Job Source Layer** — `JobSource` interface in `src/bun/sources/job-source.ts` defines `search(query, opts)`, optional `fetchDetails(job)`, `JobSourceCapabilities` (`mode: http | native`, page size, posted-at quality, rate limit). Implementations: LinkedIn via `/jobs-guest/jobs/api/seeMoreJobPostings/search` + `/jobs/view/{jobId}` (shipped, HTML via HTMLRewriter); Naukri/Indeed/TimesJobs/Foundit via hidden Electrobun BrowserWindow (in flight); Shine/Freshersworld/Internshala/Cutshort/Apna via HTTP + Cheerio (in flight). Per-source rate limits + circuit-breaker. Posted-at strings normalized to unix ms with confidence tier (`exact | relative | estimated | missing`). Source health auto-quarantines after 3 consecutive zero-insert runs.
 7. **Heuristic Scorer** — Pure function scoring title similarity to profile roles + location match to preferences + recency. Used internally to filter ~200 discovered jobs to top ~50 for LLM scoring. Never exposed to user. Interface: `score(job, profile) → number`.
 8. **LLM Scorer** — Multi-dimensional scoring on 4 axes: skills match, seniority match, domain relevance, location fit. Each axis scored individually by LLM. Outputs structured matches/gaps with `{skill, type: exact|inferred|partial, context}`. Overqualified flag when seniority mismatch detected. Full prompt + response stored as LLM Reasoning. Interface: `score(jobDetail, profile) → FitResult`.
 9. **Score Weights** — Pure function computing weighted composite from dimension scores. Default weights: 40% skills, 20% seniority, 15% domain, 25% location. User-adjustable via UI sliders. Changing weights re-computes all composites instantly without LLM re-run. Interface: `composite(dimensions, weights) → number`.
@@ -211,7 +211,7 @@ Tests should verify external behavior through module interfaces, not implementat
 ## Out of Scope
 
 - **Embeddings** for fast filtering (future enhancement).
-- **Multi-source aggregation** beyond LinkedIn (adapter interface is ready, but only LinkedIn implemented in MVP).
+- **Camoufox / anti-bot escalation fallback** for native-rendered boards (port of nakuri `chaser_probe/`) — Phase 3.
 - **Adaptive learning** from user feedback on scores.
 - **Analytics** dashboard or usage tracking.
 - **Multi-user support**, authentication, or tenant isolation.

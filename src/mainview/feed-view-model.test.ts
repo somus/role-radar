@@ -1,29 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_FIT_WEIGHTS } from "../shared/score-weights";
-import type { JobDetail, JobFeedItem } from "../shared/types";
+import { DEFAULT_JOB_FEED_FILTERS, type JobDetail, type JobFeedItem } from "../shared/types";
 import { buildFeedStatusSummary, buildFilterChips, buildJobDecisionSummary, buildJobNextAction } from "./feed-view-model";
+import { makeTestJobFeedItem } from "./test-utils";
 
 function makeJob(overrides: Partial<JobFeedItem>): JobFeedItem {
-  return {
-    id: 1,
-    source: "linkedin",
-    source_id: "job-1",
-    title: "Backend Engineer",
-    company: "Acme",
-    location: "Remote",
-    url: "https://example.com",
-    posted_at: null,
-    status: "ready",
-    description: "Build APIs",
-    seniority_level: null,
-    employment_type: null,
-    job_function: null,
-    industry: null,
-    heuristic_score: null,
-    resume_generated: false,
-    is_new: false,
-    created_at: "2026-05-01T00:00:00Z",
-    updated_at: "2026-05-01T00:00:00Z",
+  return makeTestJobFeedItem({
     skills_score: 90,
     seniority_score: 80,
     domain_score: 70,
@@ -31,13 +13,9 @@ function makeJob(overrides: Partial<JobFeedItem>): JobFeedItem {
     composite: 86,
     weighted_composite: 86,
     score_group: "Top",
-    overqualified: false,
-    matches: [],
-    gaps: [],
     summary: "Strong fit",
-    dealbreaker_violations: [],
     ...overrides,
-  };
+  });
 }
 
 describe("buildFeedStatusSummary", () => {
@@ -63,7 +41,7 @@ describe("buildFeedStatusSummary", () => {
 describe("buildFilterChips", () => {
   test("returns chips only for active filters and customized weights", () => {
     expect(buildFilterChips(
-      { minScore: 70, hideDealbreakers: true },
+      { ...DEFAULT_JOB_FEED_FILTERS, minScore: 70, hideDealbreakers: true },
       { ...DEFAULT_FIT_WEIGHTS, skills: 50, seniority: 10 },
     )).toEqual([
       { key: "min-score", label: "Score 70+", tone: "active" },

@@ -10,14 +10,17 @@ export function getJobFeedFilters(db: Database): JobFeedFilters {
   ).all() as { key: string; value: string }[];
   const map = new Map(rows.map((row) => [row.key, row.value]));
 
-  const filters = {
-    minScore: parseMinScore(map.get(MIN_SCORE_KEY)),
-    hideDealbreakers: parseBoolean(map.get(HIDE_DEALBREAKERS_KEY)),
-  };
+  const minScore = parseMinScore(map.get(MIN_SCORE_KEY));
+  const hideDealbreakers = parseBoolean(map.get(HIDE_DEALBREAKERS_KEY));
 
-  return filters.minScore === null || filters.hideDealbreakers === null
-    ? DEFAULT_JOB_FEED_FILTERS
-    : filters as JobFeedFilters;
+  if (minScore === null || hideDealbreakers === null) return DEFAULT_JOB_FEED_FILTERS;
+
+  return {
+    minScore,
+    hideDealbreakers,
+    enabledSources: DEFAULT_JOB_FEED_FILTERS.enabledSources,
+    sortMode: DEFAULT_JOB_FEED_FILTERS.sortMode,
+  };
 }
 
 export function updateJobFeedFilters(db: Database, filters: JobFeedFilters): JobFeedFilters {

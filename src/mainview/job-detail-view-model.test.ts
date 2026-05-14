@@ -1,26 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { buildDimensionRows, isSelectedDetailCurrent, scoreTone } from "./job-detail-view-model";
 import type { JobDetail } from "../shared/types";
+import { makeTestJobFeedItem } from "./test-utils";
 
 function makeDetail(overrides: Partial<JobDetail> = {}): JobDetail {
-  return {
-    id: 1,
-    source: "linkedin",
-    source_id: "job-1",
-    title: "Backend Engineer",
-    company: "Acme",
-    location: "Remote",
+  return makeTestJobFeedItem({
     url: null,
-    posted_at: null,
-    status: "ready",
     description: "Build APIs.",
     seniority_level: "Senior",
     employment_type: "Full-time",
     job_function: "Engineering",
     industry: "Software",
-    heuristic_score: null,
-    resume_generated: false,
-    is_new: false,
     created_at: "",
     updated_at: "",
     skills_score: 84,
@@ -30,13 +20,8 @@ function makeDetail(overrides: Partial<JobDetail> = {}): JobDetail {
     composite: 74,
     weighted_composite: 74,
     score_group: "Good",
-    overqualified: false,
-    matches: [],
-    gaps: [],
-    summary: null,
-    dealbreaker_violations: [],
     ...overrides,
-  };
+  });
 }
 
 describe("scoreTone", () => {

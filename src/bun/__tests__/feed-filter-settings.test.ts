@@ -8,6 +8,7 @@ import { getJobFeedFilters, updateJobFeedFilters } from "../feed-filter-settings
 const migrationSql = [
   readFileSync(join(import.meta.dir, "../../../migrations/001_init.sql"), "utf-8"),
   readFileSync(join(import.meta.dir, "../../../migrations/005_feed_filters_dealbreakers.sql"), "utf-8"),
+  readFileSync(join(import.meta.dir, "../../../migrations/007_multi_source.sql"), "utf-8"),
 ].join("\n");
 
 function freshDb(): Database {
@@ -30,11 +31,15 @@ describe("feed filter settings", () => {
     const saved = updateJobFeedFilters(db, {
       minScore: 65,
       hideDealbreakers: true,
+      enabledSources: DEFAULT_JOB_FEED_FILTERS.enabledSources,
+      sortMode: DEFAULT_JOB_FEED_FILTERS.sortMode,
     });
 
     expect(saved).toEqual({
       minScore: 65,
       hideDealbreakers: true,
+      enabledSources: DEFAULT_JOB_FEED_FILTERS.enabledSources,
+      sortMode: DEFAULT_JOB_FEED_FILTERS.sortMode,
     });
     expect(getJobFeedFilters(db)).toEqual(saved);
   });
@@ -53,6 +58,8 @@ describe("feed filter settings", () => {
     expect(() => updateJobFeedFilters(db, {
       minScore: 101,
       hideDealbreakers: false,
+      enabledSources: DEFAULT_JOB_FEED_FILTERS.enabledSources,
+      sortMode: DEFAULT_JOB_FEED_FILTERS.sortMode,
     })).toThrow("Feed minimum score must be between 0 and 100");
   });
 
@@ -62,6 +69,8 @@ describe("feed filter settings", () => {
     expect(() => updateJobFeedFilters(db, {
       minScore: 0,
       hideDealbreakers: "yes" as any,
+      enabledSources: DEFAULT_JOB_FEED_FILTERS.enabledSources,
+      sortMode: DEFAULT_JOB_FEED_FILTERS.sortMode,
     })).toThrow("Feed hide dealbreakers must be a boolean");
   });
 });

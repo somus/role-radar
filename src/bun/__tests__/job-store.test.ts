@@ -16,7 +16,8 @@ import {
   getTopNSetting,
 } from "../job-store";
 import { updateScoreWeights } from "../score-weight-settings";
-import type { ParsedJob, ParsedJobDetail } from "../../shared/types";
+import { DEFAULT_JOB_FEED_FILTERS, type ParsedJob, type ParsedJobDetail } from "../../shared/types";
+import { makeTestParsedJob } from "./test-utils";
 
 const migrationSqlThrough004 = [
   readFileSync(join(import.meta.dir, "../../../migrations/001_init.sql"), "utf-8"),
@@ -25,19 +26,11 @@ const migrationSqlThrough004 = [
   readFileSync(join(import.meta.dir, "../../../migrations/004_job_status_index.sql"), "utf-8"),
 ].join("\n");
 const migration005Sql = readFileSync(join(import.meta.dir, "../../../migrations/005_feed_filters_dealbreakers.sql"), "utf-8");
-const migrationSql = [migrationSqlThrough004, migration005Sql].join("\n");
+const migration007Sql = readFileSync(join(import.meta.dir, "../../../migrations/007_multi_source.sql"), "utf-8");
+const migrationSql = [migrationSqlThrough004, migration005Sql, migration007Sql].join("\n");
 
 function makeJob(overrides: Partial<ParsedJob> = {}): ParsedJob {
-  return {
-    sourceId: "job_1",
-    title: "Backend Engineer",
-    company: "Acme Corp",
-    location: "San Francisco, CA",
-    url: "https://linkedin.com/jobs/view/job_1/",
-    postedAt: "2026-04-25",
-    status: "discovered",
-    ...overrides,
-  };
+  return makeTestParsedJob({ sourceId: "job_1", ...overrides });
 }
 
 describe("storeJobs", () => {
@@ -62,6 +55,28 @@ describe("storeJobs", () => {
     expect(row.status).toBe("discovered");
     expect(row.is_new).toBe(1);
     expect(row.source).toBe("linkedin");
+  });
+
+  test("stores non-LinkedIn source (naukri) with normalized posted fields", () => {
+    const jobs = [makeJob({
+      source: "naukri",
+      sourceId: "naukri_42",
+      title: "Senior DevOps",
+      company: "GlobalCo",
+      postedAt: "2 days ago",
+      postedText: "2 days ago",
+      postedAtConfidence: "relative",
+      descriptionExcerptOnly: true,
+    })];
+    const result = storeJobs(db, jobs);
+
+    expect(result.inserted).toBe(1);
+    const row = db.query("SELECT * FROM jobs WHERE source_id = 'naukri_42'").get() as any;
+    expect(row.source).toBe("naukri");
+    expect(row.posted_text).toBe("2 days ago");
+    expect(row.posted_at_confidence).toBe("relative");
+    expect(row.description_excerpt_only).toBe(1);
+    expect(row.posted_at_ts).not.toBeNull();
   });
 
   test("skips duplicate (source, source_id) via INSERT OR IGNORE", () => {
@@ -218,7 +233,7 @@ describe("getJobFeed", () => {
     const result = getJobFeed(db, {
       limit: 10,
       offset: 0,
-      filters: { minScore: 65, hideDealbreakers: false },
+      filters: { ...DEFAULT_JOB_FEED_FILTERS, minScore: 65, hideDealbreakers: false },
     });
 
     expect(result.total).toBe(2);
@@ -256,7 +271,7 @@ describe("getJobFeed", () => {
     const result = getJobFeed(db, {
       limit: 10,
       offset: 0,
-      filters: { minScore: 0, hideDealbreakers: true },
+      filters: { ...DEFAULT_JOB_FEED_FILTERS, minScore: 0, hideDealbreakers: true },
     });
 
     expect(result.total).toBe(1);

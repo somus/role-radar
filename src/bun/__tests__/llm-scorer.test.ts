@@ -1,16 +1,16 @@
 import { describe, test, expect } from "bun:test";
 import { scoreJob, calculateComposite, type StructuredInferenceClient } from "../llm-scorer";
 import type { Job, Profile, FitResult } from "../../shared/types";
+import { makeTestJob } from "./test-utils";
 
-const baseJob: Job = {
+const baseJob: Job = makeTestJob({
   id: 10,
-  source: "linkedin",
   source_id: "job-10",
   title: "Senior Backend Engineer",
-  company: "Acme",
-  location: "San Francisco, CA",
   url: "https://example.com/jobs/10",
   posted_at: "2026-05-10T00:00:00Z",
+  posted_at_ts: Date.UTC(2026, 4, 10),
+  posted_at_confidence: "exact",
   status: "ready_for_scoring",
   description: "Build backend systems with TypeScript, Bun, and Postgres.",
   seniority_level: "Senior",
@@ -18,11 +18,9 @@ const baseJob: Job = {
   job_function: "Engineering",
   industry: "Software",
   heuristic_score: 0.93,
-  resume_generated: false,
-  is_new: true,
   created_at: "",
   updated_at: "",
-};
+});
 
 const baseProfile: Profile = {
   id: 1,
